@@ -6,6 +6,7 @@
     <title>Админ-панель - Modern Chat</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -149,7 +150,25 @@
     </div>
 
     <script>
-        const user = JSON.parse(localStorage.getItem('user'));
+        // Check if user data is passed via query parameters (from admin-access redirect)
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('userId');
+        const username = urlParams.get('username');
+        const role = urlParams.get('role');
+        const avatar = urlParams.get('avatar');
+
+        let user;
+        if (userId && username && role) {
+            // Data passed via query params - save to localStorage
+            user = { id: userId, username: username, role: role, avatar: avatar };
+            localStorage.setItem('user', JSON.stringify(user));
+            // Clean URL
+            window.history.replaceState({}, document.title, '/admin.html');
+        } else {
+            // Try to get from localStorage
+            user = JSON.parse(localStorage.getItem('user'));
+        }
+
         let allUsers = [];
         let editingUserId = null;
 
@@ -240,9 +259,6 @@
                             </button>` : `<button onclick="unbanUser('${user.id}')" class="text-green-600 hover:text-green-900 p-1">
                                 <i class="fas fa-check"></i>
                             </button>`}
-                            <button onclick="deleteUser('${user.id}')" class="text-red-600 hover:text-red-900 p-1">
-                                <i class="fas fa-trash"></i>
-                            </button>
                         </div>
                     </td>
                 `;
@@ -345,37 +361,10 @@
         }
 
         async function unbanUser(userId) {
-            // For unban, we'll use the update-user endpoint to remove the banned status
-            try {
-                const response = await fetch('/api/admin/update-user', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        adminId: user.id,
-                        userId: userId,
-                        newRole: 'user' // This will effectively unban by updating the user
-                    })
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    showNotification('Пользователь разбанен');
-                    loadUsers();
-                } else {
-                    showNotification(data.error || 'Ошибка разбана', 'error');
-                }
-            } catch (error) {
-                console.error('Error unbanning user:', error);
-                showNotification('Ошибка подключения к серверу', 'error');
-            }
-        }
-
-        async function deleteUser(userId) {
-            if (!confirm('Вы уверены, что хотите удалить этого пользователя? Это действие нельзя отменить!')) return;
+            if (!confirm('Вы уверены, что хотите разбанить этого пользователя?')) return;
 
             try {
-                const response = await fetch('/api/admin/delete-user', {
+                const response = await fetch('/api/admin/unban-user', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -390,25 +379,37 @@
                     showNotification(data.message);
                     loadUsers();
                 } else {
-                    showNotification(data.error || 'Ошибка удаления', 'error');
+                    showNotification(data.error || 'Ошибка разбана', 'error');
                 }
             } catch (error) {
-                console.error('Error deleting user:', error);
+                console.error('Error unbanning user:', error);
                 showNotification('Ошибка подключения к серверу', 'error');
             }
         }
+
 
         function goBackToChat() {
             window.location.href = '/chat.html';
         }
 
-        // Global online users tracking (simplified for admin panel)
+        // Global online users tracking
         let onlineUsers = [];
+
+        // Connect to socket for real-time online users tracking
+        const socket = io();
+
+        socket.on('update-online-list', (onlineUserIds) => {
+            onlineUsers = onlineUserIds;
+            updateStats();
+        });
+
+        // Регистрируем админа как онлайн пользователя
+        socket.emit('register-online', user.id);
 
         // Load initial data
         loadUsers();
 
-        // Refresh data every 30 seconds
+        // Refresh users list every 30 seconds
         setInterval(loadUsers, 30000);
     </script>
 </body>

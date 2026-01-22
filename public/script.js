@@ -2,6 +2,9 @@ const socket = io();
 const user = JSON.parse(localStorage.getItem('user'));
 if (!user) window.location.href = '/';
 
+// Регистрируем пользователя как онлайн
+socket.emit('register-online', user.id);
+
 let activeId = null,
     allUsers = [],
     onlineUsers = [],
@@ -21,7 +24,7 @@ document.getElementById('my-ava').src = fixPath(user.avatar);
 document.getElementById('my-name').innerText = user.username;
 
 // Show admin panel button if user is admin
-if (isAdmin()) {
+if (user && (user.role === 'admin' || user.username === 'admin')) {
     document.getElementById('admin-panel-btn').classList.remove('hidden');
 }
 
@@ -39,20 +42,53 @@ function renderSidebar() {
     allUsers.forEach(u => {
         if (u._id === user.id) return;
         const isOnline = onlineUsers.includes(u._id);
+        const isBanned = u.banned;
+
         const div = document.createElement('div');
         div.className = `user-item group p-3 cursor-pointer flex items-center gap-3 rounded-xl mx-2 my-1 relative transition-colors duration-200 hover:bg-gray-700 ${activeId === u._id ? 'active-chat bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 !important' : ''}`;
-        div.innerHTML = `
-            <div class="relative">
-                <img src="${fixPath(u.avatar)}" class="w-12 h-12 rounded-full object-cover">
-                ${isOnline ? '<div class="w-3 h-3 bg-green-500 rounded-full absolute bottom-0 right-0 border-2 border-gray-800"></div>' : ''}
-            </div>
-            <div class="flex-grow">
-                <div class="font-semibold text-white">${u.username}</div>
-                <div class="text-xs text-gray-400">${isOnline ? 'В сети' : 'Не в сети'}</div>
-            </div>
-            ${unread[u._id] ? `<div class="bg-blue-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full absolute right-3 top-1/2 -translate-y-1/2 shadow-lg">${unread[u._id]}</div>` : ''}
-            <!-- Кнопка бана удалена отсюда, теперь она будет в контекстном меню -->
-        `;
+
+        if (isBanned) {
+            // Для забаненных пользователей показываем только аватар
+            div.innerHTML = `
+                <div class="relative">
+                    <img src="${fixPath(u.avatar)}" class="w-12 h-12 rounded-full object-cover opacity-50">
+                    <div class="w-3 h-3 bg-red-500 rounded-full absolute bottom-0 right-0 border-2 border-gray-800"></div>
+                </div>
+                <div class="flex-grow">
+                    <div class="font-semibold text-gray-500 italic">Забанен</div>
+                    <div class="text-xs text-gray-600">Аккаунт заблокирован</div>
+                </div>
+            `;
+            // Забаненных пользователей нельзя выбрать для чата
+            div.onclick = null;
+            div.style.cursor = 'not-allowed';
+        } else {
+            div.innerHTML = `
+                <div class="relative">
+                    <img src="${fixPath(u.avatar)}" class="w-12 h-12 rounded-full object-cover">
+                    ${isOnline ? '<div class="w-3 h-3 bg-green-500 rounded-full absolute bottom-0 right-0 border-2 border-gray-800"></div>' : ''}
+                </div>
+                <div class="flex-grow">
+                    <div class="font-semibold text-white">${u.username}</div>
+                    <div class="text-xs text-gray-400">${isOnline ? 'В сети' : 'Не в сети'}</div>
+                </div>
+                ${unread[u._id] ? `<div class="bg-blue-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full absolute right-3 top-1/2 -translate-y-1/2 shadow-lg">${unread[u._id]}</div>` : ''}
+                <!-- Кнопка бана удалена отсюда, теперь она будет в контекстном меню -->
+            `;
+            div.onclick = () => {
+                activeId = u._id;
+                unread[u._id] = 0;
+                document.getElementById('chat-with').innerText = u.username;
+                document.getElementById('chat-avatar').src = fixPath(u.avatar);
+                document.getElementById('chat-avatar').classList.remove('hidden');
+                document.getElementById('pinned-message').classList.add('hidden'); // Скрываем закрепленное сообщение
+                document.getElementById('right-panel').classList.remove('hidden'); // Теперь она всегда видима
+                document.getElementById('members-list').innerHTML = ''; // Очищаем список участников
+                document.getElementById('members-count').innerText = '0'; // Сбрасываем счетчик
+                loadMsgs();
+                renderSidebar();
+            };
+        }
         div.onclick = () => { 
             activeId = u._id; 
             unread[u._id] = 0; 
@@ -497,8 +533,7 @@ async function saveProfileSettings() {
 
 // Проверка, является ли текущий пользователь админом
 function isAdmin() {
-    const currentUser = allUsers.find(u => u._id === user.id);
-    return currentUser && currentUser.role === 'admin';
+    return user && (user.role === 'admin' || user.username === 'admin');
 }
 
 // Обновление контекстного меню сообщения в зависимости от роли пользователя
@@ -729,4 +764,32 @@ document.addEventListener('click', e => {
 
 // Инициализация
 loadUsers();
-openGlobal(); // Открываем глобальный чат по умолчанию при загрузке
+function openGlobal() {
+    activeId = "GLOBAL";
+    console.log("openGlobal: activeId set to GLOBAL"); // Р›РѕРі
+    document.getElementById("chat-with").innerText = "РћР±С‰РёР№ С‡Р°С‚";
+    document.getElementById("chat-avatar").classList.add("hidden");
+    document.getElementById("pinned-message").classList.add("hidden");
+    // document.getElementById("right-panel").classList.add("hidden"); // РЈР±СЂР°Р» СЌС‚Рѕ
+    document.getElementById("right-panel").classList.remove("hidden"); // РўРµРїРµСЂСЊ РѕРЅР° РІСЃРµРіРґР° РІРёРґРёРјР°
+    loadMsgs();
+    renderSidebar();
+    renderRightPanel(); // Р”РѕР±Р°РІР»РµРЅРѕ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ РїСЂР°РІРѕР№ РїР°РЅРµР»Рё
+}
+
+socket.on("user-banned", (userId) => {
+    if (userId === user.id) {
+        alert("Р’С‹ Р±С‹Р»Рё Р·Р°Р±Р°РЅРµРЅС‹ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРј.");
+        logout();
+    } else {
+        renderSidebar();
+    }
+});
+
+socket.on("user-unbanned", (userId) => {
+    renderSidebar();
+});
+
+// РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ
+loadUsers();
+openGlobal(); // РћС‚РєСЂС‹РІР°РµРј РіР»РѕР±Р°Р»СЊРЅС‹Р№ С‡Р°С‚ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ РїСЂРё Р·Р°РіСЂСѓР·РєРµ

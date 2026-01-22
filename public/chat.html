@@ -13,7 +13,7 @@
         }
 
         .chat-main {
-            background-image: url('/img/chat-bg.jpg'); /* Пример фона, можно заменить на градиент */
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); /* Градиентный фон */
             background-size: cover;
             background-position: center;
         }
@@ -80,7 +80,7 @@
             <b id="my-name" class="text-lg font-semibold text-white"></b>
         </div>
         <div class="flex gap-1">
-            <button id="admin-panel-btn" class="text-gray-400 hover:text-blue-400 transition-colors duration-200 p-2 rounded-full hover:bg-gray-700 hidden" onclick="(() => { const u = JSON.parse(localStorage.getItem('user')); if(u && u.role === 'admin'){window.location.href='/admin-access?userId='+u.id}else{alert('У вас нет доступа к админ-панели')} })()" title="Админ-панель">
+            <button id="admin-panel-btn" class="text-gray-400 hover:text-blue-400 transition-colors duration-200 p-2 rounded-full hover:bg-gray-700 hidden" onclick="(() => { const u = JSON.parse(localStorage.getItem('user')); if(u && (u.role === 'admin' || u.username === 'admin')){window.location.href='/admin-access?userId='+u.id}else{alert('У вас нет доступа к админ-панели')} })()" title="Админ-панель">
                 <i class="fas fa-shield-alt text-xl"></i>
             </button>
             <button class="text-gray-400 hover:text-blue-400 transition-colors duration-200 p-2 rounded-full hover:bg-gray-700" onclick="logout()" title="Выйти">

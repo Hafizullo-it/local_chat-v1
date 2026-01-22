@@ -6,6 +6,8 @@ const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const Datastore = require('nedb-promises');
 const fs = require('fs');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,7 +26,7 @@ const msgsDb = Datastore.create({ filename: './data/messages.db', autoload: true
     if (!adminUser) {
         const hashedPassword = await bcrypt.hash('adminpass', 10); // Пароль по умолчанию для админа
         await usersDb.insert({ username: 'admin', password: hashedPassword, avatar: '', lastMsgAt: new Date(), role: 'admin' });
-        console.log('Администратор "admin" создан с паролем "adminpass"');
+        console.log('Администратор "admin" создан с паролем по умолчанию');
     } else {
         // Если админ существует, но пароль не совпадает с adminpass, обновляем его
         const defaultPassword = await bcrypt.hash('adminpass', 10);
@@ -32,7 +34,7 @@ const msgsDb = Datastore.create({ filename: './data/messages.db', autoload: true
         const updates = {};
         if (!match) {
             updates.password = defaultPassword;
-            console.log('Пароль администратора "admin" сброшен на "adminpass"');
+            console.log('Пароль администратора "admin" сброшен на значение по умолчанию');
         }
         if (!adminUser.role) {
             updates.role = 'admin';
@@ -50,7 +52,37 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-app.use(express.json());
+// Безопасность
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+            scriptSrcAttr: ["'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:", "blob:"],
+            connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
+            fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+        },
+    },
+}));
+
+// Rate limiting (более мягкий)
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // Увеличиваем лимит для тестирования
+    message: 'Слишком много запросов с этого IP, попробуйте позже.'
+});
+app.use(limiter);
+
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20, // Увеличиваем лимит попыток входа
+    message: 'Слишком много попыток входа, попробуйте позже.'
+});
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
@@ -67,7 +99,8 @@ app.get('/admin-access', async (req, res) => {
     }
 
     // Если админ - перенаправляем на админ-панель
-    res.redirect('/admin.html');
+    // Передаем данные пользователя через query параметры для сохранения в localStorage
+    res.redirect(`/admin.html?userId=${userId}&username=${encodeURIComponent(user.username)}&role=${user.role}&avatar=${encodeURIComponent(user.avatar || '')}`);
 });
 
 // Админ-панель API
@@ -84,6 +117,7 @@ app.get('/api/admin/users', async (req, res) => {
         username: u.username,
         avatar: u.avatar,
         role: u.role,
+        banned: u.banned || false,
         lastMsgAt: u.lastMsgAt
     }));
     res.json(usersWithoutPasswords);
@@ -167,6 +201,10 @@ app.post('/api/admin/ban-user', async (req, res) => {
         return res.status(404).json({ error: 'Пользователь не найден.' });
     }
 
+    // Удаляем все сообщения забаниваемого пользователя
+    await msgsDb.remove({ senderId: userId });
+    await msgsDb.remove({ receiverId: userId });
+
     // Помечаем пользователя как забаненного (добавляем поле banned)
     await usersDb.update({ _id: userId }, { $set: { banned: true } });
 
@@ -176,20 +214,71 @@ app.post('/api/admin/ban-user', async (req, res) => {
     res.json({ success: true, message: 'Пользователь успешно забанен.' });
 });
 
+app.post('/api/admin/unban-user', async (req, res) => {
+    const { adminId, userId } = req.body;
+    const adminUser = await usersDb.findOne({ _id: adminId });
+    if (!adminUser || adminUser.role !== 'admin') {
+        return res.status(403).json({ error: 'Недостаточно прав для выполнения этой операции.' });
+    }
+
+    const userToUnban = await usersDb.findOne({ _id: userId });
+    if (!userToUnban) {
+        return res.status(404).json({ error: 'Пользователь не найден.' });
+    }
+
+    // Снимаем бан с пользователя
+    await usersDb.update({ _id: userId }, { $unset: { banned: true } });
+
+    // Отправляем сигнал всем клиентам о разбане
+    io.emit('user-unbanned', userId);
+
+    res.json({ success: true, message: 'Пользователь успешно разбанен.' });
+});
+
 const onlineUsers = new Map();
 
+// Валидация входных данных
+function sanitizeInput(input) {
+    if (typeof input !== 'string') return '';
+    return input.trim();
+}
+
 // API: Логин/Регистрация (Авто-создание если нет)
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
     const { username, password } = req.body;
-    let user = await usersDb.findOne({ username });
+
+    // Валидация входных данных
+    const cleanUsername = sanitizeInput(username);
+    const cleanPassword = sanitizeInput(password);
+
+    if (!cleanUsername || !cleanPassword) {
+        return res.status(400).json({ error: 'Имя пользователя и пароль обязательны.' });
+    }
+
+    if (cleanUsername.length > 50 || cleanPassword.length > 100) {
+        return res.status(400).json({ error: 'Имя пользователя или пароль слишком длинные.' });
+    }
+
+    let user = await usersDb.findOne({ username: cleanUsername });
     if (!user) {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        user = await usersDb.insert({ username, password: hashedPassword, avatar: '/img/default-avatar.png', lastMsgAt: new Date(), role: 'user' });
+        const hashedPassword = await bcrypt.hash(cleanPassword, 10);
+        user = await usersDb.insert({ username: cleanUsername, password: hashedPassword, avatar: '/img/default-avatar.png', lastMsgAt: new Date(), role: 'user' });
 
     } else {
-        const match = await bcrypt.compare(password, user.password);
+        const match = await bcrypt.compare(cleanPassword, user.password);
         if (!match) return res.status(400).json({ error: 'Неверный пароль' });
+
+        // Проверяем, не забанен ли пользователь
+        if (user.banned) {
+            return res.status(403).json({ error: 'Ваш аккаунт заблокирован. Обратитесь к администратору.' });
+        }
     }
+
+    // Проверяем, не забанен ли новый пользователь
+    if (user.banned) {
+        return res.status(403).json({ error: 'Ваш аккаунт заблокирован. Обратитесь к администратору.' });
+    }
+
     res.json({ success: true, user: { id: user._id, username: user.username, avatar: user.avatar, role: user.role } });
 });
 
