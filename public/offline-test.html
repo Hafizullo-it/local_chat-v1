@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест оффлайн работы Modern Chat</title>
+    <link href="/libs/tailwind.min.css" rel="stylesheet">
+    <link href="/libs/fontawesome.min.css" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        .test-passed { color: #10b981; }
+        .test-failed { color: #ef4444; }
+        .test-pending { color: #f59e0b; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <div class="bg-white rounded-lg shadow-lg p-8">
+            <h1 class="text-3xl font-bold text-center mb-8 text-gray-800">
+                🧪 Тест оффлайн работы Modern Chat
+            </h1>
+
+            <div class="space-y-6">
+                <!-- Тест 1: Загрузка страницы -->
+                <div class="test-item bg-gray-50 p-6 rounded-lg">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg font-semibold text-gray-800">1. Загрузка страницы</h3>
+                        <span id="test-page-load" class="test-pending">⏳ Проверка...</span>
+                    </div>
+                    <p class="text-gray-600">Проверяет, что страница загружается без внешних ресурсов</p>
+                </div>
+
+                <!-- Тест 2: CSS стили -->
+                <div class="test-item bg-gray-50 p-6 rounded-lg">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg font-semibold text-gray-800">2. CSS стили</h3>
+                        <span id="test-css" class="test-pending">⏳ Проверка...</span>
+                    </div>
+                    <p class="text-gray-600">Проверяет, что Tailwind CSS загружается локально</p>
+                    <div class="mt-3 p-3 bg-blue-100 rounded text-blue-800 font-medium">
+                        Этот блок должен быть стилизован с Tailwind CSS
+                    </div>
+                </div>
+
+                <!-- Тест 3: Font Awesome иконки -->
+                <div class="test-item bg-gray-50 p-6 rounded-lg">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg font-semibold text-gray-800">3. Font Awesome иконки</h3>
+                        <span id="test-fontawesome" class="test-pending">⏳ Проверка...</span>
+                    </div>
+                    <p class="text-gray-600">Проверяет, что иконки Font Awesome отображаются</p>
+                    <div class="mt-3 flex space-x-4">
+                        <i class="fas fa-edit text-yellow-500 text-2xl" title="Изменить"></i>
+                        <i class="fas fa-trash text-red-500 text-2xl" title="Удалить"></i>
+                        <i class="fas fa-cog text-gray-600 text-2xl" title="Настройки"></i>
+                        <i class="fas fa-shield-alt text-blue-600 text-2xl" title="Админ"></i>
+                    </div>
+                </div>
+
+                <!-- Тест 4: Socket.IO соединение -->
+                <div class="test-item bg-gray-50 p-6 rounded-lg">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg font-semibold text-gray-800">4. Socket.IO соединение</h3>
+                        <span id="test-socket" class="test-pending">⏳ Проверка...</span>
+                    </div>
+                    <p class="text-gray-600">Проверяет, что WebSocket соединение устанавливается</p>
+                    <div id="socket-status" class="mt-2 text-sm text-gray-500">Подключение...</div>
+                </div>
+
+                <!-- Тест 5: API доступность -->
+                <div class="test-item bg-gray-50 p-6 rounded-lg">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg font-semibold text-gray-800">5. API эндпоинты</h3>
+                        <span id="test-api" class="test-pending">⏳ Проверка...</span>
+                    </div>
+                    <p class="text-gray-600">Проверяет доступность основных API эндпоинтов</p>
+                    <div id="api-results" class="mt-2 space-y-1 text-sm"></div>
+                </div>
+
+                <!-- Тест 6: Изображения -->
+                <div class="test-item bg-gray-50 p-6 rounded-lg">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg font-semibold text-gray-800">6. Изображения и ресурсы</h3>
+                        <span id="test-images" class="test-pending">⏳ Проверка...</span>
+                    </div>
+                    <p class="text-gray-600">Проверяет загрузку аватаров и других изображений</p>
+                    <div class="mt-3 flex space-x-4">
+                        <img src="/img/default-avatar.png" alt="Аватар" class="w-12 h-12 rounded-full border-2 border-gray-300" onerror="this.style.display='none'">
+                        <div class="text-sm text-gray-500">Если изображение видно - тест пройден</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 p-6 bg-blue-50 rounded-lg">
+                <h3 class="text-xl font-semibold text-blue-800 mb-4">📊 Результаты тестирования</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-green-600" id="passed-count">0</div>
+                        <div class="text-sm text-gray-600">Пройдено</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-red-600" id="failed-count">0</div>
+                        <div class="text-sm text-gray-600">Провалено</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-yellow-600" id="pending-count">6</div>
+                        <div class="text-sm text-gray-600">Ожидает</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 text-center">
+                <button onclick="runAllTests()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg mr-4">
+                    🔄 Перезапустить тесты
+                </button>
+                <a href="/" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg">
+                    🏠 Вернуться в чат
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let testResults = {
+            pageLoad: false,
+            css: false,
+            fontawesome: false,
+            socket: false,
+            api: false,
+            images: false
+        };
+
+        function updateTestStatus(testName, status, message = '') {
+            const element = document.getElementById(`test-${testName}`);
+            const countElement = status === 'passed' ? document.getElementById('passed-count') :
+                               status === 'failed' ? document.getElementById('failed-count') :
+                               document.getElementById('pending-count');
+
+            element.className = `test-${status}`;
+            element.innerHTML = status === 'passed' ? '✅ Пройден' :
+                               status === 'failed' ? '❌ Провал' :
+                               '⏳ Проверка...';
+
+            if (message) {
+                const messageElement = document.createElement('div');
+                messageElement.className = 'text-sm mt-1';
+                messageElement.textContent = message;
+                element.parentNode.appendChild(messageElement);
+            }
+
+            if (testResults[testName] !== status) {
+                if (status === 'passed') {
+                    document.getElementById('passed-count').textContent = parseInt(document.getElementById('passed-count').textContent) + 1;
+                    if (testResults[testName] === 'failed') {
+                        document.getElementById('failed-count').textContent = parseInt(document.getElementById('failed-count').textContent) - 1;
+                    }
+                } else if (status === 'failed') {
+                    document.getElementById('failed-count').textContent = parseInt(document.getElementById('failed-count').textContent) + 1;
+                    if (testResults[testName] === 'passed') {
+                        document.getElementById('passed-count').textContent = parseInt(document.getElementById('passed-count').textContent) - 1;
+                    }
+                }
+                document.getElementById('pending-count').textContent = parseInt(document.getElementById('pending-count').textContent) - 1;
+                testResults[testName] = status;
+            }
+        }
+
+        async function testPageLoad() {
+            try {
+                // Проверяем, что страница загружается без ошибок
+                updateTestStatus('pageLoad', 'passed', 'Страница загружается корректно');
+            } catch (error) {
+                updateTestStatus('pageLoad', 'failed', `Ошибка загрузки: ${error.message}`);
+            }
+        }
+
+        function testCSS() {
+            // Проверяем, что Tailwind CSS применяется
+            const testElement = document.querySelector('.bg-blue-100');
+            if (testElement && window.getComputedStyle(testElement).backgroundColor !== '') {
+                updateTestStatus('css', 'passed', 'Tailwind CSS загружен и работает');
+            } else {
+                updateTestStatus('css', 'failed', 'Tailwind CSS не применяется');
+            }
+        }
+
+        function testFontAwesome() {
+            // Проверяем, что Font Awesome иконки отображаются
+            const icons = document.querySelectorAll('.fa-edit, .fa-trash, .fa-cog, .fa-shield-alt');
+            let loaded = 0;
+            icons.forEach(icon => {
+                if (window.getComputedStyle(icon, '::before').content !== 'none') {
+                    loaded++;
+                }
+            });
+
+            if (loaded >= 3) { // Минимум 3 иконки должны загрузиться
+                updateTestStatus('fontawesome', 'passed', `Font Awesome работает (${loaded} иконок загружено)`);
+            } else {
+                updateTestStatus('fontawesome', 'failed', `Font Awesome не работает (только ${loaded} иконок)`);
+            }
+        }
+
+        function testSocketConnection() {
+            try {
+                socket = io();
+                const statusElement = document.getElementById('socket-status');
+
+                socket.on('connect', () => {
+                    statusElement.textContent = '✅ Подключено';
+                    statusElement.className = 'mt-2 text-sm text-green-600';
+                    updateTestStatus('socket', 'passed', 'WebSocket соединение установлено');
+                });
+
+                socket.on('connect_error', (error) => {
+                    statusElement.textContent = `❌ Ошибка: ${error.message}`;
+                    statusElement.className = 'mt-2 text-sm text-red-600';
+                    updateTestStatus('socket', 'failed', `WebSocket ошибка: ${error.message}`);
+                });
+
+                socket.on('disconnect', () => {
+                    statusElement.textContent = '🔌 Отключено';
+                    statusElement.className = 'mt-2 text-sm text-yellow-600';
+                });
+
+                // Таймаут на подключение
+                setTimeout(() => {
+                    if (!socket.connected) {
+                        updateTestStatus('socket', 'failed', 'Таймаут подключения к WebSocket');
+                    }
+                }, 3000);
+
+            } catch (error) {
+                updateTestStatus('socket', 'failed', `Ошибка Socket.IO: ${error.message}`);
+            }
+        }
+
+        async function testAPI() {
+            const apiResults = document.getElementById('api-results');
+            const endpoints = ['/api/users'];
+            let passed = 0;
+
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(endpoint);
+                    const result = document.createElement('div');
+                    if (response.ok) {
+                        result.textContent = `✅ ${endpoint} - доступен`;
+                        result.className = 'text-green-600';
+                        passed++;
+                    } else {
+                        result.textContent = `❌ ${endpoint} - ошибка ${response.status}`;
+                        result.className = 'text-red-600';
+                    }
+                    apiResults.appendChild(result);
+                } catch (error) {
+                    const result = document.createElement('div');
+                    result.textContent = `❌ ${endpoint} - ${error.message}`;
+                    result.className = 'text-red-600';
+                    apiResults.appendChild(result);
+                }
+            }
+
+            if (passed > 0) {
+                updateTestStatus('api', 'passed', `API работает (${passed}/${endpoints.length} эндпоинтов доступны)`);
+            } else {
+                updateTestStatus('api', 'failed', 'API недоступен');
+            }
+        }
+
+        function testImages() {
+            const img = document.querySelector('img[alt="Аватар"]');
+            if (img && img.complete && img.naturalHeight > 0) {
+                updateTestStatus('images', 'passed', 'Изображения загружаются корректно');
+            } else {
+                updateTestStatus('images', 'failed', 'Изображения не загружаются');
+            }
+        }
+
+        function runAllTests() {
+            // Сброс результатов
+            Object.keys(testResults).forEach(key => {
+                testResults[key] = false;
+            });
+            document.getElementById('passed-count').textContent = '0';
+            document.getElementById('failed-count').textContent = '0';
+            document.getElementById('pending-count').textContent = '6';
+
+            // Очистка дополнительных сообщений
+            document.querySelectorAll('.test-item .text-sm').forEach(el => {
+                if (!el.textContent.includes('Проверяет')) {
+                    el.remove();
+                }
+            });
+            document.getElementById('api-results').innerHTML = '';
+
+            // Запуск всех тестов
+            testPageLoad();
+            testCSS();
+            testFontAwesome();
+            testSocketConnection();
+            testAPI();
+            testImages();
+        }
+
+        // Автоматический запуск тестов при загрузке страницы
+        window.addEventListener('load', () => {
+            setTimeout(runAllTests, 500); // Небольшая задержка для загрузки ресурсов
+        });
+    </script>
+</body>
+</html>

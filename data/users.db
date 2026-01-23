@@ -4,3 +4,7 @@
 {"username":"shadow","password":"$2b$10$e7pLwBSTxnJKs8.hst9A5.nwIJevYXnvyBEGqqo4B2dqGnW5W0oe.","avatar":"/img/default-avatar.png","lastMsgAt":{"$$date":1769185276443},"role":"user","_id":"NuXI7Z3tVNEplB9I"}
 {"username":"admin1","password":"$2b$10$whLEPUGfhygTS3794npKY.cYb4JrYG6WCrDv622OhEUhzsWxrhe2a","avatar":"","lastMsgAt":{"$$date":1769101305637},"role":"user","_id":"UlkJHzvuc5tJKOdO","banned":true}
 {"username":"asus","password":"$2b$10$0XUgnDGzgIA0V3UCTPXcxuiVvVb6LS4zh/5v2NqHBeexkM6H511Eq","avatar":"/uploads/1769080873586-mermaid-diagram-2026-01-12-170041.png","lastMsgAt":{"$$date":1769080827273},"role":"user","_id":"qXxtAFZAwZpQxe7X","banned":true}
+{"$$deleted":true,"_id":"EhQWr2LWX83034wd"}
+{"$$deleted":true,"_id":"UlkJHzvuc5tJKOdO"}
+{"username":"asus","password":"$2b$10$0XUgnDGzgIA0V3UCTPXcxuiVvVb6LS4zh/5v2NqHBeexkM6H511Eq","avatar":"/uploads/1769080873586-mermaid-diagram-2026-01-12-170041.png","lastMsgAt":{"$$date":1769080827273},"role":"user","_id":"qXxtAFZAwZpQxe7X"}
+{"$$deleted":true,"_id":"GxpDmBErnwjYhReQ"}

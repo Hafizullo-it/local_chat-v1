@@ -54,3 +54,5 @@
 {"senderId":"M36BPRlQgq5PhY48","receiverId":"GLOBAL","text":"123","senderName":"admin","senderAva":"/uploads/default.png","timestamp":{"$$date":1768927934126},"read":false,"_id":"yqUM5ngeve9ZsodT","status":"read"}
 {"senderId":"M36BPRlQgq5PhY48","receiverId":"GLOBAL","text":"324","senderName":"admin","senderAva":"/uploads/1768930113804-solar-system-planet-collage.jpg","replyTo":null,"timestamp":{"$$date":1769004398182},"read":false,"_id":"zRY6vXwnWayltMLm","status":"read"}
 {"senderId":"M36BPRlQgq5PhY48","receiverId":"UlkJHzvuc5tJKOdO","text":"....","senderName":"admin","senderAva":"/uploads/1768930113804-solar-system-planet-collage.jpg","replyTo":{"_id":"14gcqpCm2fROBeJW","senderName":"admin1","content":"11111"},"timestamp":{"$$date":1769080550750},"status":"sent","_id":"zn0RGGRUBw7Cv2Lh"}
+{"$$deleted":true,"_id":"14gcqpCm2fROBeJW"}
+{"$$deleted":true,"_id":"H0AOiiPHQVQoorcI"}
