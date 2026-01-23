@@ -85,6 +85,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+app.use('/libs/webfonts', express.static(path.join(__dirname, 'public/libs/webfonts')));
+
+// Корневой маршрут - перенаправление на чат
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'chat.html'));
+});
 
 // Проверка доступа к админ-панели
 app.get('/admin-access', async (req, res) => {
@@ -181,6 +187,9 @@ app.post('/api/admin/delete-user', async (req, res) => {
 
     // Удаляем пользователя
     await usersDb.remove({ _id: userId });
+
+    // Отправляем сигнал всем клиентам об удалении пользователя
+    io.emit('user-deleted', userId);
 
     res.json({ success: true, message: 'Пользователь успешно удален.' });
 });

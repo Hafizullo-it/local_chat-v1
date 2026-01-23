@@ -790,6 +790,21 @@ socket.on("user-unbanned", (userId) => {
     renderSidebar();
 });
 
+socket.on("user-deleted", (userId) => {
+    // Удаляем пользователя из списка
+    allUsers = allUsers.filter(u => u._id !== userId);
+    // Удаляем из онлайн пользователей
+    onlineUsers = onlineUsers.filter(id => id !== userId);
+    // Перерисовываем интерфейс
+    renderSidebar();
+
+    // Если удаленный пользователь был в активном чате, закрываем чат
+    if (activeId === userId) {
+        activeId = null;
+        openGlobal();
+    }
+});
+
 // РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ
 loadUsers();
 openGlobal(); // РћС‚РєСЂС‹РІР°РµРј РіР»РѕР±Р°Р»СЊРЅС‹Р№ С‡Р°С‚ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ РїСЂРё Р·Р°РіСЂСѓР·РєРµ
