@@ -11,7 +11,16 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+// Socket.IO с оптимизированными настройками для уменьшения нагрузки
+const io = new Server(server, {
+    pingTimeout: 60000,      // Увеличено с 5000 до 60000 (1 минута)
+    pingInterval: 25000,     // Увеличено с 5000 до 25000 (25 секунд)
+    maxHttpBufferSize: 1e6,  // Максимальный размер буфера
+    cors: {
+        origin: true,        // Разрешить все origins
+        methods: ["GET", "POST"]
+    }
+});
 
 // Директории
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
@@ -497,11 +506,23 @@ app.post('/api/admin/edit-user', upload.single('avatar'), async (req, res) => { 
 });
 
 
+// Throttling для update-online-list
+let lastOnlineUpdate = 0;
+const ONLINE_UPDATE_THROTTLE = 2000; // 2 секунды
+
+function emitOnlineUpdate() {
+    const now = Date.now();
+    if (now - lastOnlineUpdate > ONLINE_UPDATE_THROTTLE) {
+        lastOnlineUpdate = now;
+        io.emit('update-online-list', Array.from(onlineUsers.keys()));
+    }
+}
+
 io.on('connection', (socket) => {
     socket.on('register-online', (userId) => {
         socket.userId = userId;
         onlineUsers.set(userId, socket.id);
-        io.emit('update-online-list', Array.from(onlineUsers.keys()));
+        emitOnlineUpdate(); // Используем throttling
     });
 
     socket.on('private-message', async (data) => {
@@ -603,7 +624,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         onlineUsers.delete(socket.userId);
-        io.emit('update-online-list', Array.from(onlineUsers.keys()));
+        emitOnlineUpdate(); // Используем throttling
     });
 });
 
