@@ -19,6 +19,7 @@ if (!fs.existsSync('./public/uploads')) fs.mkdirSync('./public/uploads', { recur
 
 const usersDb = Datastore.create({ filename: './data/users.db', autoload: true });
 const msgsDb = Datastore.create({ filename: './data/messages.db', autoload: true });
+const blockedIPsDb = Datastore.create({ filename: './data/blocked_ips.db', autoload: true });
 
 // Проверка и создание админ-пользователя
 (async () => {
@@ -52,6 +53,35 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Middleware для блокировки IP
+app.use(async (req, res, next) => {
+    const clientIP = req.ip || req.connection.remoteAddress ||
+                     (req.socket && req.socket.remoteAddress) ||
+                     (req.connection && req.connection.remoteAddress) ||
+                     'unknown';
+
+    // Очищаем IP от ::ffff: префикса для IPv4
+    const cleanIP = clientIP.replace(/^::ffff:/, '');
+
+    try {
+        const blockedIP = await blockedIPsDb.findOne({ ip: cleanIP });
+        if (blockedIP) {
+            return res.status(403).json({
+                error: 'Ваш IP адрес заблокирован. Обратитесь к администратору.',
+                blocked: true,
+                reason: blockedIP.reason || 'Не указана',
+                blockedAt: blockedIP.blockedAt
+            });
+        }
+    } catch (error) {
+        console.error('Error checking blocked IP:', error);
+    }
+
+    // Сохраняем IP в req для использования в других местах
+    req.clientIP = cleanIP;
+    next();
+});
+
 // Безопасность (минимальная для HTTP)
 app.use(helmet({
     contentSecurityPolicy: false,
@@ -60,17 +90,17 @@ app.use(helmet({
     originAgentCluster: false,
 }));
 
-// Rate limiting (более мягкий)
+// Rate limiting (мягкий для чата)
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000, // Увеличиваем лимит для тестирования
-    message: 'Слишком много запросов с этого IP, попробуйте позже.'
+    windowMs: 60 * 1000, // 1 minute
+    max: 5000, // Увеличиваем лимит для активного использования
+    message: 'Слишком много запросов, подождите немного.'
 });
 app.use(limiter);
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20, // Увеличиваем лимит попыток входа
+    max: 50, // Увеличиваем лимит попыток входа
     message: 'Слишком много попыток входа, попробуйте позже.'
 });
 
@@ -245,6 +275,90 @@ app.post('/api/admin/unban-user', async (req, res) => {
     io.emit('user-unbanned', userId);
 
     res.json({ success: true, message: 'Пользователь успешно разбанен.' });
+});
+
+// API для управления заблокированными IP
+app.get('/api/admin/blocked-ips', async (req, res) => {
+    const adminUser = await usersDb.findOne({ _id: req.query.adminId });
+    if (!adminUser || adminUser.role !== 'admin') {
+        return res.status(403).json({ error: 'Недостаточно прав для выполнения этой операции.' });
+    }
+
+    try {
+        const blockedIPs = await blockedIPsDb.find({}).sort({ blockedAt: -1 });
+        res.json(blockedIPs);
+    } catch (error) {
+        console.error('Error getting blocked IPs:', error);
+        res.status(500).json({ error: 'Ошибка получения списка заблокированных IP' });
+    }
+});
+
+app.post('/api/admin/block-ip', async (req, res) => {
+    const { adminId, ip, reason } = req.body;
+    const adminUser = await usersDb.findOne({ _id: adminId });
+    if (!adminUser || adminUser.role !== 'admin') {
+        return res.status(403).json({ error: 'Недостаточно прав для выполнения этой операции.' });
+    }
+
+    if (!ip || !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+        return res.status(400).json({ error: 'Некорректный IP адрес.' });
+    }
+
+    try {
+        const existingBlock = await blockedIPsDb.findOne({ ip });
+        if (existingBlock) {
+            return res.status(400).json({ error: 'Этот IP уже заблокирован.' });
+        }
+
+        const blockData = {
+            ip,
+            reason: reason || 'Заблокирован администратором',
+            blockedAt: new Date(),
+            blockedBy: adminId
+        };
+
+        await blockedIPsDb.insert(blockData);
+        res.json({ success: true, message: `IP ${ip} успешно заблокирован.` });
+    } catch (error) {
+        console.error('Error blocking IP:', error);
+        res.status(500).json({ error: 'Ошибка блокировки IP' });
+    }
+});
+
+app.post('/api/admin/unblock-ip', async (req, res) => {
+    const { adminId, ip } = req.body;
+    const adminUser = await usersDb.findOne({ _id: adminId });
+    if (!adminUser || adminUser.role !== 'admin') {
+        return res.status(403).json({ error: 'Недостаточно прав для выполнения этой операции.' });
+    }
+
+    try {
+        const result = await blockedIPsDb.remove({ ip });
+        if (result > 0) {
+            res.json({ success: true, message: `IP ${ip} успешно разблокирован.` });
+        } else {
+            res.status(404).json({ error: 'IP не найден в списке заблокированных.' });
+        }
+    } catch (error) {
+        console.error('Error unblocking IP:', error);
+        res.status(500).json({ error: 'Ошибка разблокировки IP' });
+    }
+});
+
+app.post('/api/admin/unblock-all-ips', async (req, res) => {
+    const { adminId } = req.body;
+    const adminUser = await usersDb.findOne({ _id: adminId });
+    if (!adminUser || adminUser.role !== 'admin') {
+        return res.status(403).json({ error: 'Недостаточно прав для выполнения этой операции.' });
+    }
+
+    try {
+        const result = await blockedIPsDb.remove({}, { multi: true });
+        res.json({ success: true, message: `Все заблокированные IP разблокированы (${result} адресов).` });
+    } catch (error) {
+        console.error('Error unblocking all IPs:', error);
+        res.status(500).json({ error: 'Ошибка разблокировки IP адресов' });
+    }
 });
 
 const onlineUsers = new Map();
