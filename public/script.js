@@ -46,6 +46,7 @@ function renderSidebar() {
 
         const div = document.createElement('div');
         div.className = `user-item group p-3 cursor-pointer flex items-center gap-3 rounded-xl mx-2 my-1 relative transition-colors duration-200 hover:bg-gray-700 ${activeId === u._id ? 'active-chat bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 !important' : ''}`;
+        div.setAttribute('data-user-id', u._id);
 
         if (isBanned) {
             // Для забаненных пользователей показываем только аватар
@@ -281,8 +282,8 @@ async function uploadFile(input) {
 socket.emit('register-online', user.id);
 socket.on('update-online-list', ids => {
     onlineUsers = ids;
-    renderSidebar();
-    renderRightPanel();
+    updateOnlineStatuses();
+    updateRightPanel();
 });
 socket.on('new-private-message', m => {
     if (m.receiverId === activeId || m.senderId === activeId || (m.receiverId === 'GLOBAL' && activeId === 'GLOBAL')) {
@@ -292,8 +293,9 @@ socket.on('new-private-message', m => {
         }
     } else {
         unread[m.senderId] = (unread[m.senderId] || 0) + 1;
+        // Обновляем только счетчик непрочитанных для этого пользователя
+        updateUnreadCounter(m.senderId);
     }
-    loadUsers();
 });
 
 socket.on('user-typing', ({
@@ -774,20 +776,20 @@ function openGlobal() {
     document.getElementById("right-panel").classList.remove("hidden"); // РўРµРїРµСЂСЊ РѕРЅР° РІСЃРµРіРґР° РІРёРґРёРјР°
     loadMsgs();
     renderSidebar();
-    renderRightPanel(); // Р”РѕР±Р°РІР»РµРЅРѕ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ РїСЂР°РІРѕР№ РїР°РЅРµР»Рё
+    updateRightPanel();
 }
 
 socket.on("user-banned", (userId) => {
     if (userId === user.id) {
-        alert("Р’С‹ Р±С‹Р»Рё Р·Р°Р±Р°РЅРµРЅС‹ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРј.");
+        alert("Вы были забанены администратором.");
         logout();
     } else {
-        renderSidebar();
+        updateUserStatus(userId, 'banned');
     }
 });
 
 socket.on("user-unbanned", (userId) => {
-    renderSidebar();
+    updateUserStatus(userId, 'unbanned');
 });
 
 socket.on("user-deleted", (userId) => {
@@ -804,6 +806,68 @@ socket.on("user-deleted", (userId) => {
         openGlobal();
     }
 });
+
+// Оптимизированные функции обновления интерфейса
+function updateUnreadCounter(userId) {
+    const userElement = document.querySelector(`[data-user-id="${userId}"]`);
+    if (userElement) {
+        const counter = userElement.querySelector('.unread-counter');
+        const count = unread[userId] || 0;
+        if (count > 0) {
+            if (!counter) {
+                const newCounter = document.createElement('div');
+                newCounter.className = 'unread-counter bg-blue-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full absolute right-3 top-1/2 -translate-y-1/2 shadow-lg';
+                userElement.appendChild(newCounter);
+            }
+            const counterElement = userElement.querySelector('.unread-counter');
+            counterElement.textContent = count;
+            counterElement.style.display = 'flex';
+        } else if (counter) {
+            counter.style.display = 'none';
+        }
+    }
+}
+
+function updateOnlineStatuses() {
+    // Обновляем статусы онлайн только для видимых элементов
+    allUsers.forEach(u => {
+        if (u._id !== user.id) {
+            const userElement = document.querySelector(`[data-user-id="${u._id}"]`);
+            if (userElement) {
+                const statusIndicator = userElement.querySelector('.status-indicator');
+                const isOnline = onlineUsers.includes(u._id);
+                if (statusIndicator) {
+                    statusIndicator.className = `status-indicator w-3 h-3 rounded-full absolute bottom-0 right-0 border-2 border-gray-800 ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`;
+                }
+            }
+        }
+    });
+}
+
+function updateRightPanel() {
+    // Легкое обновление правой панели
+    const onlineCount = onlineUsers.length;
+    document.getElementById('members-count').textContent = onlineCount;
+}
+
+function updateUserStatus(userId, action) {
+    // Обновляем статус пользователя без полной перерисовки
+    const user = allUsers.find(u => u._id === userId);
+    if (user) {
+        user.banned = (action === 'banned');
+        // Обновляем соответствующий элемент в интерфейсе
+        const userElement = document.querySelector(`[data-user-id="${userId}"]`);
+        if (userElement) {
+            if (action === 'banned') {
+                userElement.classList.add('banned-user');
+                userElement.style.opacity = '0.5';
+            } else {
+                userElement.classList.remove('banned-user');
+                userElement.style.opacity = '1';
+            }
+        }
+    }
+}
 
 // РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ
 loadUsers();
