@@ -63,7 +63,7 @@ function renderSidebar() {
             div.onclick = null;
             div.style.cursor = 'not-allowed';
         } else {
-            div.innerHTML = `
+        div.innerHTML = `
                 <div class="relative">
                     <img src="${fixPath(u.avatar)}" class="w-12 h-12 rounded-full object-cover">
                     ${isOnline ? '<div class="w-3 h-3 bg-green-500 rounded-full absolute bottom-0 right-0 border-2 border-gray-800"></div>' : ''}

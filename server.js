@@ -52,19 +52,9 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Безопасность
+// Безопасность (временно отключена CSP для тестирования)
 app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],
-            scriptSrcAttr: ["'unsafe-inline'"],
-            imgSrc: ["'self'", "data:", "blob:"],
-            connectSrc: ["'self'", "ws:", "wss:"],
-            fontSrc: ["'self'"],
-        },
-    },
+    contentSecurityPolicy: false,
 }));
 
 // Rate limiting (более мягкий)
@@ -83,6 +73,16 @@ const authLimiter = rateLimit({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Middleware для запрета кэширования статических файлов
+app.use((req, res, next) => {
+    if (req.url.match(/\.(css|js|html|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+    }
+    next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 app.use('/libs/webfonts', express.static(path.join(__dirname, 'public/libs/webfonts')));
