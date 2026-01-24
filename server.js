@@ -52,9 +52,12 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Безопасность (временно отключена CSP для тестирования)
+// Безопасность (минимальная для HTTP)
 app.use(helmet({
     contentSecurityPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
+    originAgentCluster: false,
 }));
 
 // Rate limiting (более мягкий)
