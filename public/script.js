@@ -2,9 +2,6 @@ const socket = io();
 const user = JSON.parse(localStorage.getItem('user'));
 if (!user) window.location.href = '/';
 
-// Регистрируем пользователя как онлайн
-socket.emit('register-online', user.id);
-
 let activeId = null,
     allUsers = [],
     onlineUsers = [],
@@ -291,7 +288,9 @@ async function uploadFile(input) {
 }
 
 // Socket events
-socket.emit('register-online', user.id);
+socket.on('connect', () => {
+    socket.emit('register-online', user.id);
+});
 socket.on('update-online-list', ids => {
     // Проверяем, действительно ли список онлайн пользователей изменился
     const currentOnline = onlineUsers.slice().sort();
