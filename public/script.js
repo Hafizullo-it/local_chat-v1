@@ -36,9 +36,20 @@ async function loadUsers() {
     renderRightPanel();
 }
 
+// Debouncing для renderSidebar
+let renderSidebarTimeout = null;
+
 function renderSidebar() {
-    const cont = document.getElementById('user-list');
-    cont.innerHTML = '';
+    // Отменяем предыдущий вызов
+    if (renderSidebarTimeout) {
+        clearTimeout(renderSidebarTimeout);
+    }
+
+    // Выполняем перерисовку через 50ms чтобы избежать слишком частых обновлений
+    renderSidebarTimeout = setTimeout(() => {
+        const cont = document.getElementById('user-list');
+        cont.innerHTML = '';
+
     allUsers.forEach(u => {
         if (u._id === user.id) return;
         const isOnline = onlineUsers.includes(u._id);
@@ -90,9 +101,9 @@ function renderSidebar() {
                 renderSidebar();
             };
         }
-        div.onclick = () => { 
-            activeId = u._id; 
-            unread[u._id] = 0; 
+        div.onclick = () => {
+            activeId = u._id;
+            unread[u._id] = 0;
             document.getElementById('chat-with').innerText = u.username;
             document.getElementById('chat-avatar').src = fixPath(u.avatar);
             document.getElementById('chat-avatar').classList.remove('hidden');
@@ -101,7 +112,7 @@ function renderSidebar() {
             document.getElementById('members-list').innerHTML = ''; // Очищаем список участников
             document.getElementById('members-count').innerText = '0'; // Сбрасываем счетчик
             loadMsgs();
-            renderSidebar();
+            // renderSidebar() не нужен здесь - он вызовется автоматически при изменении activeId
         };
 
         // Добавляем обработчик правого клика для открытия контекстного меню пользователя
@@ -113,7 +124,8 @@ function renderSidebar() {
         };
 
         cont.appendChild(div);
-    });
+        });
+    }, 50);
 }
 
 function renderRightPanel() {
@@ -281,9 +293,15 @@ async function uploadFile(input) {
 // Socket events
 socket.emit('register-online', user.id);
 socket.on('update-online-list', ids => {
-    onlineUsers = ids;
-    updateOnlineStatuses();
-    updateRightPanel();
+    // Проверяем, действительно ли список онлайн пользователей изменился
+    const currentOnline = onlineUsers.slice().sort();
+    const newOnline = ids.slice().sort();
+
+    if (JSON.stringify(currentOnline) !== JSON.stringify(newOnline)) {
+        onlineUsers = ids;
+        updateOnlineStatuses();
+        updateRightPanel();
+    }
 });
 socket.on('new-private-message', m => {
     if (m.receiverId === activeId || m.senderId === activeId || (m.receiverId === 'GLOBAL' && activeId === 'GLOBAL')) {
@@ -828,26 +846,56 @@ function updateUnreadCounter(userId) {
     }
 }
 
+// Throttling для обновлений статуса онлайн
+let onlineStatusUpdateTimeout = null;
+
 function updateOnlineStatuses() {
-    // Обновляем статусы онлайн только для видимых элементов
-    allUsers.forEach(u => {
-        if (u._id !== user.id) {
-            const userElement = document.querySelector(`[data-user-id="${u._id}"]`);
-            if (userElement) {
-                const statusIndicator = userElement.querySelector('.status-indicator');
-                const isOnline = onlineUsers.includes(u._id);
-                if (statusIndicator) {
-                    statusIndicator.className = `status-indicator w-3 h-3 rounded-full absolute bottom-0 right-0 border-2 border-gray-800 ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`;
+    // Отменяем предыдущий вызов если он был
+    if (onlineStatusUpdateTimeout) {
+        clearTimeout(onlineStatusUpdateTimeout);
+    }
+
+    // Выполняем обновление через 100ms чтобы избежать слишком частых обновлений
+    onlineStatusUpdateTimeout = setTimeout(() => {
+        // Обновляем статусы онлайн только для видимых элементов
+        allUsers.forEach(u => {
+            if (u._id !== user.id) {
+                const userElement = document.querySelector(`[data-user-id="${u._id}"]`);
+                if (userElement) {
+                    const statusIndicator = userElement.querySelector('.status-indicator');
+                    const isOnline = onlineUsers.includes(u._id);
+                    if (statusIndicator) {
+                        const currentClass = statusIndicator.className;
+                        const newClass = `status-indicator w-3 h-3 rounded-full absolute bottom-0 right-0 border-2 border-gray-800 ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`;
+
+                        // Обновляем только если статус действительно изменился
+                        if (currentClass !== newClass) {
+                            statusIndicator.className = newClass;
+                        }
+                    }
                 }
             }
-        }
-    });
+        });
+    }, 100);
 }
 
+// Throttling для обновления правой панели
+let rightPanelUpdateTimeout = null;
+
 function updateRightPanel() {
-    // Легкое обновление правой панели
-    const onlineCount = onlineUsers.length;
-    document.getElementById('members-count').textContent = onlineCount;
+    // Отменяем предыдущий вызов
+    if (rightPanelUpdateTimeout) {
+        clearTimeout(rightPanelUpdateTimeout);
+    }
+
+    // Выполняем обновление через 200ms
+    rightPanelUpdateTimeout = setTimeout(() => {
+        const onlineCount = onlineUsers.length;
+        const counterElement = document.getElementById('members-count');
+        if (counterElement && counterElement.textContent !== onlineCount.toString()) {
+            counterElement.textContent = onlineCount;
+        }
+    }, 200);
 }
 
 function updateUserStatus(userId, action) {

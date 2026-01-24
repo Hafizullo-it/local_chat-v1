@@ -649,11 +649,11 @@
         loadUsers();
         loadBlockedIPs();
 
-        // Refresh data every 30 seconds
+        // Refresh data every 60 seconds to reduce load
         setInterval(() => {
             loadUsers();
             loadBlockedIPs();
-        }, 30000);
+        }, 60000);
     </script>
 </body>
 </html>
