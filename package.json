@@ -1,0 +1,27 @@
+{
+  "name": "modern_chat",
+  "version": "1.0.0",
+  "description": "Современный оффлайн чат с админ-панелью",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [
+    "chat",
+    "websocket",
+    "offline"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.2",
+    "nedb-promises": "^6.2.3",
+    "socket.io": "^4.8.3"
+  }
+}

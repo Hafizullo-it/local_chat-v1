@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест стилей - Modern Chat</title>
+    <link href="/libs/tailwind.min.css?v=2.0" rel="stylesheet">
+    <link href="/libs/fontawesome.min.css?v=2.0" rel="stylesheet">
+    <style>
+        .test-section {
+            margin: 20px;
+            padding: 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        .success { color: #10b981; font-weight: bold; }
+        .error { color: #ef4444; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto max-w-4xl py-8">
+        <div class="bg-white rounded-lg shadow-lg p-8">
+            <h1 class="text-3xl font-bold text-center text-blue-600 mb-8">
+                🎨 Тест стилей Modern Chat
+            </h1>
+
+            <div class="test-section bg-blue-50">
+                <h2 class="text-xl font-semibold text-blue-800 mb-4">1. Tailwind CSS</h2>
+                <div class="space-y-3">
+                    <button class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        Синяя кнопка (hover для изменения цвета)
+                    </button>
+                    <div class="bg-green-100 p-4 rounded-lg text-green-800">
+                        Зеленый блок с padding и border-radius
+                    </div>
+                    <div class="flex space-x-4">
+                        <div class="bg-red-500 text-white p-3 rounded">Красный</div>
+                        <div class="bg-yellow-500 text-white p-3 rounded">Желтый</div>
+                        <div class="bg-purple-500 text-white p-3 rounded">Фиолетовый</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="test-section bg-green-50">
+                <h2 class="text-xl font-semibold text-green-800 mb-4">2. Font Awesome Иконки</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <i class="fas fa-edit text-3xl text-blue-500 mb-2"></i>
+                        <div class="text-sm">fa-edit</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-trash text-3xl text-red-500 mb-2"></i>
+                        <div class="text-sm">fa-trash</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-cog text-3xl text-gray-500 mb-2"></i>
+                        <div class="text-sm">fa-cog</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-shield-alt text-3xl text-green-500 mb-2"></i>
+                        <div class="text-sm">fa-shield-alt</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-user text-3xl text-purple-500 mb-2"></i>
+                        <div class="text-sm">fa-user</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-sign-out-alt text-3xl text-orange-500 mb-2"></i>
+                        <div class="text-sm">fa-sign-out-alt</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-paperclip text-3xl text-indigo-500 mb-2"></i>
+                        <div class="text-sm">fa-paperclip</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-times text-3xl text-pink-500 mb-2"></i>
+                        <div class="text-sm">fa-times</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="test-section bg-purple-50">
+                <h2 class="text-xl font-semibold text-purple-800 mb-4">3. Layout и Responsive</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="bg-gray-200 p-4 rounded text-center">Колонка 1</div>
+                    <div class="bg-gray-300 p-4 rounded text-center">Колонка 2</div>
+                    <div class="bg-gray-400 p-4 rounded text-center">Колонка 3</div>
+                </div>
+                <div class="mt-4 hidden md:block">
+                    <p class="text-green-600 font-medium">✓ Этот текст виден только на средних и больших экранах</p>
+                </div>
+                <div class="mt-4 md:hidden">
+                    <p class="text-blue-600 font-medium">✓ Этот текст виден только на маленьких экранах</p>
+                </div>
+            </div>
+
+            <div class="test-section bg-yellow-50">
+                <h2 class="text-xl font-semibold text-yellow-800 mb-4">4. Результат тестирования</h2>
+                <div class="space-y-2">
+                    <div id="tailwind-test" class="flex items-center space-x-2">
+                        <span class="text-lg">🎨</span>
+                        <span>Tailwind CSS:</span>
+                        <span id="tailwind-result" class="error">Проверяется...</span>
+                    </div>
+                    <div id="fontawesome-test" class="flex items-center space-x-2">
+                        <span class="text-lg">🔤</span>
+                        <span>Font Awesome:</span>
+                        <span id="fontawesome-result" class="error">Проверяется...</span>
+                    </div>
+                    <div id="responsive-test" class="flex items-center space-x-2">
+                        <span class="text-lg">📱</span>
+                        <span>Responsive:</span>
+                        <span id="responsive-result" class="error">Проверяется...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-8">
+                <a href="/" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg mr-4 transition-colors">
+                    🏠 Вернуться в чат
+                </a>
+                <button onclick="runStyleTests()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg transition-colors">
+                    🔄 Перепроверить стили
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function runStyleTests() {
+            // Проверяем Tailwind CSS
+            const tailwindElement = document.querySelector('.bg-blue-500');
+            const tailwindResult = document.getElementById('tailwind-result');
+            if (tailwindElement && window.getComputedStyle(tailwindElement).backgroundColor !== '') {
+                tailwindResult.textContent = 'Работает ✅';
+                tailwindResult.className = 'success';
+            } else {
+                tailwindResult.textContent = 'Не работает ❌';
+                tailwindResult.className = 'error';
+            }
+
+            // Проверяем Font Awesome
+            const faElement = document.querySelector('.fa-edit');
+            const faResult = document.getElementById('fontawesome-result');
+            if (faElement && window.getComputedStyle(faElement, '::before').content !== 'none') {
+                faResult.textContent = 'Работает ✅';
+                faResult.className = 'success';
+            } else {
+                faResult.textContent = 'Не работает ❌';
+                faResult.className = 'error';
+            }
+
+            // Проверяем responsive
+            const responsiveResult = document.getElementById('responsive-result');
+            const gridElement = document.querySelector('.grid');
+            if (gridElement && window.getComputedStyle(gridElement).display === 'grid') {
+                responsiveResult.textContent = 'Работает ✅';
+                responsiveResult.className = 'success';
+            } else {
+                responsiveResult.textContent = 'Не работает ❌';
+                responsiveResult.className = 'error';
+            }
+        }
+
+        // Автоматический запуск тестов при загрузке
+        window.addEventListener('load', () => {
+            setTimeout(runStyleTests, 500);
+        });
+    </script>
+</body>
+</html>

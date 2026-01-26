@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест иконок Font Awesome</title>
+    <link href="/libs/tailwind.min.css?v=1.0" rel="stylesheet">
+    <link href="/libs/fontawesome.min.css?v=1.0" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-8">
+        <h1 class="text-3xl font-bold text-center mb-8 text-gray-800">Тест иконок Font Awesome</h1>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Тест основных иконок чата -->
+            <div class="bg-blue-50 p-4 rounded-lg">
+                <h3 class="font-semibold text-blue-800 mb-3">Основные иконки чата:</h3>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-cog text-lg text-gray-600"></i>
+                        <span>Настройки</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-sign-out-alt text-lg text-red-500"></i>
+                        <span>Выход</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-shield-alt text-lg text-blue-600"></i>
+                        <span>Админ</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-info-circle text-lg text-green-500"></i>
+                        <span>Информация</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Тест иконок сообщений -->
+            <div class="bg-green-50 p-4 rounded-lg">
+                <h3 class="font-semibold text-green-800 mb-3">Иконки сообщений:</h3>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-edit text-lg text-yellow-500"></i>
+                        <span>Изменить</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-trash text-lg text-red-500"></i>
+                        <span>Удалить</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-paperclip text-lg text-blue-500"></i>
+                        <span>Прикрепить файл</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-thumbtack text-lg text-purple-500"></i>
+                        <span>Закрепить</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Тест иконок статуса -->
+            <div class="bg-purple-50 p-4 rounded-lg">
+                <h3 class="font-semibold text-purple-800 mb-3">Иконки статуса:</h3>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-times text-lg text-red-500"></i>
+                        <span>Закрыть</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                        <span>В сети</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                        <span>Забанен</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 text-center">
+            <p class="text-gray-600 mb-4">Если иконки отображаются правильно, значит Font Awesome работает корректно!</p>
+            <a href="/" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors">
+                Вернуться в чат
+            </a>
+        </div>
+    </div>
+</body>
+</html>
