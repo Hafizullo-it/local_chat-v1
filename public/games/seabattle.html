@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sea Battle - Modern Chat Games</title>
+    <link href="/libs/tailwind.min.css?v=5.0" rel="stylesheet">
+    <link href="/libs/fontawesome.min.css?v=5.0" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f1f5f9;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        #game-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: linear-gradient(to bottom, #1e3a8a, #0f172a);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(10, 35px);
+            grid-template-rows: repeat(10, 35px);
+            gap: 1px;
+            background-color: #334155;
+            border: 4px solid #334155;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .cell {
+            width: 35px;
+            height: 35px;
+            background-color: #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .cell:hover {
+            background-color: #334155;
+        }
+
+        .cell.ship {
+            background-color: #64748b;
+        }
+
+        .cell.hit {
+            background-color: #ef4444;
+        }
+
+        .cell.miss::after {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background-color: #64748b;
+            border-radius: 50%;
+        }
+
+        .cell.sunk {
+            background-color: #7f1d1d;
+        }
+
+        .boards-wrapper {
+            display: flex;
+            gap: 50px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .status-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #game-info {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(10px);
+            padding: 15px 30px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(5px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ship-part {
+            position: absolute;
+            inset: 4px;
+            background: #3b82f6;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+
+        .turn-indicator {
+            padding: 5px 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .my-turn {
+            background: #10b981;
+            color: white;
+        }
+
+        .enemy-turn {
+            background: #ef4444;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="p-4 border-b border-white/5 bg-slate-900/50 flex justify-between items-center backdrop-blur-md">
+        <a href="/" class="text-gray-400 hover:text-white transition-colors">
+            <i class="fas fa-arrow-left"></i> Назад в чат
+        </a>
+        <h1 class="text-xl font-black text-blue-400">SEA BATTLE</h1>
+        <div id="player-info" class="flex items-center gap-3">
+            <span id="player-name">Загрузка...</span>
+        </div>
+    </header>
+
+    <div id="game-container">
+        <div id="status-header">
+            <div id="game-info">Ожидание оппонента...</div>
+            <div id="turn-display" class="hidden"></div>
+        </div>
+
+        <div class="boards-wrapper">
+            <div class="text-center">
+                <h3 class="mb-2 text-gray-400 font-bold uppercase tracking-widest text-xs">Мой Флот</h3>
+                <div id="my-board" class="board"></div>
+            </div>
+            <div class="text-center">
+                <h3 class="mb-2 text-blue-400 font-bold uppercase tracking-widest text-xs">Флот Врага</h3>
+                <div id="enemy-board" class="board"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lobby/Matchmaking Overlay -->
+    <div id="match-overlay" class="overlay">
+        <div class="text-center p-10 bg-gray-800 rounded-3xl border border-gray-700 shadow-2xl">
+            <div class="text-6xl mb-6">⚓</div>
+            <h2 class="text-3xl font-black mb-4">Морской Бой</h2>
+            <p class="text-gray-400 mb-8">Нажмите кнопку, чтобы найти свободного противника в сети.</p>
+            <button id="btn-find-match"
+                class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-10 rounded-2xl shadow-lg transition-all active:scale-95 cursor-pointer">
+                НАЙТИ ИГРУ
+            </button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/games/seabattle.js?v=1.0"></script>
+</body>
+
+</html>

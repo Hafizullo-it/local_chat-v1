@@ -1,6 +1,28 @@
-const socket = io();
-const user = JSON.parse(localStorage.getItem('user'));
-if (!user) window.location.href = '/';
+let socket = null;
+if (typeof io !== 'undefined') {
+    socket = io({
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+    });
+} else {
+    console.error('Socket.IO library not loaded!');
+}
+
+let user = null;
+try {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+        user = JSON.parse(storedUser);
+        // Basic validation: ensure it's an object and has an id
+        if (!user || typeof user !== 'object' || !user.id) {
+            user = null;
+        }
+    }
+} catch (e) {
+    console.error('Error parsing user from localStorage:', e);
+    user = null;
+}
 
 let activeId = null,
     allUsers = [],
@@ -9,24 +31,223 @@ let activeId = null,
     selectedMsg = null,
     currentReply = null,
     msgs = [],
-    selectedUser = null, // Добавлено для хранения выбранного пользователя для контекстного меню
-    selectedUserElement = null; // Добавлено для хранения элемента пользователя для контекстного меню
+    selectedUser = null,
+    selectedUserElement = null;
+
+// DOM Elements
+const loginScreen = document.getElementById('login-screen');
+const chatLayout = document.getElementById('chat-layout');
+const chatScreen = document.getElementById('chat-screen');
+
+// Auth State
+let currentAuthMode = 'login'; // 'login' or 'register'
+
+function switchAuthTab(mode) {
+    currentAuthMode = mode;
+    const loginTab = document.getElementById('tab-login');
+    const registerTab = document.getElementById('tab-register');
+    const submitBtn = document.getElementById('auth-submit-btn');
+    const errorMsg = document.getElementById('auth-error');
+
+    errorMsg.classList.add('hidden'); // Hide errors on switch
+
+    if (mode === 'login') {
+        loginTab.classList.remove('text-gray-400', 'hover:text-white');
+        loginTab.classList.add('text-white', 'bg-blue-600', 'shadow-md');
+
+        registerTab.classList.remove('text-white', 'bg-blue-600', 'shadow-md');
+        registerTab.classList.add('text-gray-400', 'hover:text-white');
+
+        submitBtn.textContent = 'Войти в чат';
+    } else {
+        registerTab.classList.remove('text-gray-400', 'hover:text-white');
+        registerTab.classList.add('text-white', 'bg-blue-600', 'shadow-md');
+
+        loginTab.classList.remove('text-white', 'bg-blue-600', 'shadow-md');
+        loginTab.classList.add('text-gray-400', 'hover:text-white');
+
+        submitBtn.textContent = 'Зарегистрироваться';
+    }
+}
+
+// XSS защита - экранирование HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Toast уведомления вместо alert
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-green-600',
+        error: 'bg-red-600',
+        warning: 'bg-yellow-600',
+        info: 'bg-blue-600',
+        'admin-alert': 'bg-red-800 border-2 border-yellow-500 shadow-[0_0_20px_rgba(220,38,38,0.5)]'
+    };
+    toast.className = `fixed top-4 right-4 ${colors[type] || colors.info} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
 
 function fixPath(p) {
     return p ? p : '/img/default-avatar.png';
 }
 
-// Init
-document.getElementById('my-ava').src = fixPath(user.avatar);
-document.getElementById('my-name').innerText = user.username;
+// Safety Timeout: Hide loading screen after 5 seconds NO MATTER WHAT
+const safetyTimeout = setTimeout(() => {
+    console.warn('Safety timeout reached! Forcing loader hide.');
+    hideLoading();
+}, 5000);
 
-// Show admin panel button if user is admin
-if (user && (user.role === 'admin' || user.username === 'admin')) {
-    document.getElementById('admin-panel-btn').classList.remove('hidden');
+function hideLoading() {
+    console.log('hideLoading: removing overlay');
+    const loader = document.getElementById('loading-screen');
+    if (loader) {
+        loader.style.opacity = '0';
+        loader.style.pointerEvents = 'none';
+        setTimeout(() => {
+            loader.style.display = 'none';
+            loader.classList.add('hidden');
+            // Clean up safety timeout
+            clearTimeout(safetyTimeout);
+        }, 500);
+    }
+}
+
+async function initApp() {
+    console.log('initApp: Starting initialization...');
+
+    if (!user || !user.id) {
+        console.log('initApp: No valid user, showing login screen.');
+        // Показываем экран входа, скрываем чат
+        if (loginScreen) loginScreen.classList.remove('hidden');
+        if (chatLayout) chatLayout.classList.add('hidden');
+        if (chatScreen) chatScreen.classList.add('hidden');
+        hideLoading();
+        return;
+    }
+
+    try {
+        console.log('initApp: User found, setting up chat...');
+        // Скрываем экран входа, показываем чат
+        if (loginScreen) loginScreen.classList.add('hidden');
+        if (chatLayout) chatLayout.classList.remove('hidden');
+        if (chatScreen) chatScreen.classList.remove('hidden');
+
+        document.getElementById('my-ava').src = fixPath(user.avatar);
+        document.getElementById('my-name').innerText = user.username;
+
+        // Show admin panel button if user is admin
+        if (user && (user.role === 'admin' || user.username === 'admin')) {
+            const adminBtn = document.getElementById('admin-panel-btn');
+            if (adminBtn) adminBtn.classList.remove('hidden');
+        }
+
+        try {
+            await loadUsers();
+        } catch (e) {
+            console.error('Failed to load users:', e);
+        }
+
+        // Подключаемся к сокету только если пользователь авторизован
+        if (socket) {
+            try {
+                if (socket.connected) {
+                    socket.emit('register-online', user.id);
+                } else {
+                    socket.on('connect', () => {
+                        socket.emit('register-online', user.id);
+                    });
+                }
+            } catch (e) {
+                console.error('Socket registration error:', e);
+            }
+        } else {
+            console.warn('Socket not initialized, offline mode?');
+        }
+
+        try {
+            setupSocketListeners();
+        } catch (e) {
+            console.error('Failed to setup socket listeners:', e);
+        }
+
+        try {
+            openGlobal();
+        } catch (e) {
+            console.error('Failed to open global chat:', e);
+        }
+    } catch (err) {
+        console.error('Error during initApp:', err);
+        showToast('Ошибка при загрузке данных чата', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function handleAuth() {
+    const usernameInput = document.getElementById('auth-username');
+    const passwordInput = document.getElementById('auth-password');
+    const errorMsg = document.getElementById('auth-error');
+
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value.trim();
+
+    if (!username || !password) {
+        errorMsg.textContent = 'Введите имя пользователя и пароль';
+        errorMsg.classList.remove('hidden');
+        return;
+    }
+
+    const apiUrl = currentAuthMode === 'login' ? '/api/login' : '/api/register';
+
+    try {
+        const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            user = data.user;
+            localStorage.setItem('user', JSON.stringify(user));
+            errorMsg.classList.add('hidden');
+            initApp();
+            showToast(currentAuthMode === 'login' ? 'С возвращением!' : 'Регистрация успешна!', 'success');
+        } else {
+            errorMsg.textContent = data.error || 'Ошибка авторизации';
+            errorMsg.classList.remove('hidden');
+        }
+    } catch (err) {
+        console.error(err);
+        errorMsg.textContent = 'Ошибка соединения с сервером';
+        errorMsg.classList.remove('hidden');
+    }
+}
+
+function logout() {
+    localStorage.removeItem('user');
+    user = null;
+    if (socket && typeof socket.disconnect === 'function') {
+        socket.disconnect();
+    }
+    window.location.href = '/';
 }
 
 // Users & Sidebar
 async function loadUsers() {
+    if (!user) return; // Не загружать если нет юзера
     const res = await fetch('/api/users');
     allUsers = await res.json();
     renderSidebar();
@@ -36,92 +257,101 @@ async function loadUsers() {
 // Debouncing для renderSidebar
 let renderSidebarTimeout = null;
 
+// Оптимизированный renderSidebar (Flicker Fix)
 function renderSidebar() {
-    // Отменяем предыдущий вызов
-    if (renderSidebarTimeout) {
-        clearTimeout(renderSidebarTimeout);
-    }
+    if (renderSidebarTimeout) clearTimeout(renderSidebarTimeout);
 
-    // Выполняем перерисовку через 50ms чтобы избежать слишком частых обновлений
     renderSidebarTimeout = setTimeout(() => {
         const cont = document.getElementById('user-list');
-        cont.innerHTML = '';
+        const searchTerm = document.getElementById('user-search') ? document.getElementById('user-search').value.toLowerCase() : '';
 
-    allUsers.forEach(u => {
-        if (u._id === user.id) return;
-        const isOnline = onlineUsers.includes(u._id);
-        const isBanned = u.banned;
+        // Используем Fragment
+        const fragment = document.createDocumentFragment();
 
-        const div = document.createElement('div');
-        div.className = `user-item group p-3 cursor-pointer flex items-center gap-3 rounded-xl mx-2 my-1 relative transition-colors duration-200 hover:bg-gray-700 ${activeId === u._id ? 'active-chat bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 !important' : ''}`;
-        div.setAttribute('data-user-id', u._id);
+        allUsers.forEach(u => {
+            if (u._id === user.id) return;
+            if (searchTerm && !u.username.toLowerCase().includes(searchTerm)) return; // Filter
 
-        if (isBanned) {
-            // Для забаненных пользователей показываем только аватар
-            div.innerHTML = `
+            const isOnline = onlineUsers.includes(u._id);
+            const isBanned = u.banned;
+            const isActive = activeId === u._id;
+
+            const div = document.createElement('div');
+            // ID для обновлений
+            div.id = `user-item-${u._id}`;
+            div.className = `user-item group p-3 cursor-pointer flex items-center gap-3 rounded-xl mx-2 my-1 relative transition-colors duration-200 hover:bg-gray-700 ${isActive ? 'active-chat bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 !important' : ''}`;
+            div.setAttribute('data-user-id', u._id);
+
+            if (isBanned) {
+                div.innerHTML = `
                 <div class="relative">
                     <img src="${fixPath(u.avatar)}" class="w-12 h-12 rounded-full object-cover opacity-50">
                     <div class="w-3 h-3 bg-red-500 rounded-full absolute bottom-0 right-0 border-2 border-gray-800"></div>
                 </div>
-                <div class="flex-grow">
-                    <div class="font-semibold text-gray-500 italic">Забанен</div>
-                    <div class="text-xs text-gray-600">Аккаунт заблокирован</div>
-                </div>
-            `;
-            // Забаненных пользователей нельзя выбрать для чата
-            div.onclick = null;
-            div.style.cursor = 'not-allowed';
-        } else {
-        div.innerHTML = `
+                <div class="flex-grow min-w-0">
+                    <div class="font-semibold text-gray-500 italic truncate">Забанен</div>
+                    <div class="text-xs text-gray-600 truncate">Аккаунт заблокирован</div>
+                </div>`;
+                div.onclick = null;
+                div.style.cursor = 'not-allowed';
+            } else {
+                div.innerHTML = `
                 <div class="relative">
-                    <img src="${fixPath(u.avatar)}" class="w-12 h-12 rounded-full object-cover">
-                    ${isOnline ? '<div class="w-3 h-3 bg-green-500 rounded-full absolute bottom-0 right-0 border-2 border-gray-800"></div>' : ''}
+                    <img src="${fixPath(u.avatar)}" class="w-12 h-12 rounded-full object-cover border-2 ${isActive ? 'border-blue-400' : 'border-transparent'} group-hover:border-gray-500 transition-all duration-200">
+                    <div class="status-indicator w-3 h-3 rounded-full absolute bottom-0 right-0 border-2 border-gray-800 ${isOnline ? 'bg-green-500 scale-110 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-gray-500'} transition-all duration-300"></div>
                 </div>
-                <div class="flex-grow">
-                    <div class="font-semibold text-white">${u.username}</div>
-                    <div class="text-xs text-gray-400">${isOnline ? 'В сети' : 'Не в сети'}</div>
+                <div class="flex-grow min-w-0">
+                    <div class="flex justify-between items-center">
+                        <b class="text-gray-100 group-hover:text-white truncate ${isActive ? 'text-blue-200' : ''}">${u.username}</b>
+                        <div class="unread-counter bg-blue-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-lg ${unread[u._id] ? 'flex' : 'hidden'}">${unread[u._id] || ''}</div>
+                    </div>
                 </div>
-                ${unread[u._id] ? `<div class="bg-blue-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full absolute right-3 top-1/2 -translate-y-1/2 shadow-lg">${unread[u._id]}</div>` : ''}
-                <!-- Кнопка бана удалена отсюда, теперь она будет в контекстном меню -->
-            `;
-            div.onclick = () => {
-                activeId = u._id;
-                unread[u._id] = 0;
-                document.getElementById('chat-with').innerText = u.username;
-                document.getElementById('chat-avatar').src = fixPath(u.avatar);
-                document.getElementById('chat-avatar').classList.remove('hidden');
-                document.getElementById('pinned-message').classList.add('hidden'); // Скрываем закрепленное сообщение
-                document.getElementById('right-panel').classList.remove('hidden'); // Теперь она всегда видима
-                document.getElementById('members-list').innerHTML = ''; // Очищаем список участников
-                document.getElementById('members-count').innerText = '0'; // Сбрасываем счетчик
-                loadMsgs();
-                renderSidebar();
+                <button class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white transition-all duration-200 p-1" onclick="showUserContextMenu(event, '${u._id}', '${u.username}', '${u.role}')" title="Меню">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>`;
+
+                div.onclick = () => {
+                    if (activeId !== u._id) {
+                        activeId = u._id;
+                        unread[u._id] = 0;
+                        document.getElementById('chat-with').innerText = u.username;
+
+                        const avaImg = document.getElementById('chat-avatar');
+                        const newSrc = fixPath(u.avatar);
+                        // Fix flicker: не обновлять, если тот же source
+                        if (!avaImg.src.endsWith(newSrc)) {
+                            avaImg.src = newSrc;
+                        }
+                        avaImg.classList.remove('hidden');
+
+                        document.getElementById('pinned-message').classList.add('hidden');
+                        // Скрываем правую панель (ширина 0)
+                        document.getElementById('right-panel').classList.remove('w-72');
+                        document.getElementById('right-panel').classList.add('w-0');
+                        document.getElementById('right-panel').classList.remove('p-4'); // убираем паддинг чтобы полностью скрылась
+                        document.getElementById('right-panel').classList.add('p-0');
+
+                        document.getElementById('members-list').innerHTML = '';
+                        document.getElementById('members-count').innerText = '0';
+                        loadMsgs();
+                        renderSidebar();
+                    }
+                };
+            }
+
+            // Context Menu
+            div.oncontextmenu = (e) => {
+                e.preventDefault();
+                selectedUser = u;
+                selectedUserElement = div;
+                if (typeof updateUserContextMenu === 'function') updateUserContextMenu(e);
             };
-        }
-        div.onclick = () => {
-            activeId = u._id;
-            unread[u._id] = 0;
-            document.getElementById('chat-with').innerText = u.username;
-            document.getElementById('chat-avatar').src = fixPath(u.avatar);
-            document.getElementById('chat-avatar').classList.remove('hidden');
-            document.getElementById('pinned-message').classList.add('hidden'); // Скрываем закрепленное сообщение
-            document.getElementById('right-panel').classList.remove('hidden'); // Теперь она всегда видима
-            document.getElementById('members-list').innerHTML = ''; // Очищаем список участников
-            document.getElementById('members-count').innerText = '0'; // Сбрасываем счетчик
-            loadMsgs();
-            // renderSidebar() не нужен здесь - он вызовется автоматически при изменении activeId
-        };
 
-        // Добавляем обработчик правого клика для открытия контекстного меню пользователя
-        div.oncontextmenu = (e) => {
-            e.preventDefault();
-            selectedUser = u; // Сохраняем выбранного пользователя
-            selectedUserElement = div; // Сохраняем элемент пользователя
-            updateUserContextMenu(e); // Обновляем и показываем контекстное меню пользователя
-        };
-
-        cont.appendChild(div);
+            fragment.appendChild(div);
         });
+
+        cont.innerHTML = '';
+        cont.appendChild(fragment);
     }, 50);
 }
 
@@ -185,13 +415,15 @@ function renderMsg(m) {
     }
 
     let fileHTML = '';
-    if (m.file) {
+    if (m.file && m.file.path) {
         const fileExtension = m.file.path.split('.').pop().toLowerCase();
         if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension)) {
             fileHTML = `<img src="${m.file.path}" class="max-w-full rounded-lg mt-2 cursor-pointer" onclick="window.open('${m.file.path}')">`;
         } else {
             fileHTML = `<a href="${m.file.path}" target="_blank" class="text-blue-300 underline mt-2 flex items-center gap-1"><i class="fas fa-file"></i> ${m.file.fileName || 'Файл'}</a>`;
         }
+    } else if (m.file) {
+        fileHTML = `<div class="text-xs text-red-400 mt-1 italic">[Файл поврежден (нет пути)]</div>`;
     }
 
     messageContent.innerHTML = `
@@ -208,11 +440,13 @@ function renderMsg(m) {
 
     messageContent.oncontextmenu = (e) => {
         e.preventDefault();
+        console.log('Right click on message', m._id);
         selectedMsg = m;
         updateContextMenu();
         const menu = document.getElementById('context-menu');
-        menu.style.left = e.pageX + 'px';
-        menu.style.top = e.pageY + 'px';
+        // Use clientX/Y for fixed positioning
+        menu.style.left = e.clientX + 'px';
+        menu.style.top = e.clientY + 'px';
         menu.classList.remove('hidden');
     };
 
@@ -221,28 +455,44 @@ function renderMsg(m) {
     document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
 
     if (!isMe && m.status !== 'read') {
-        socket.emit('message-read', { msgId: m._id, readerId: user.id });
+        if (socket) {
+            socket.emit('message-read', { msgId: m._id, readerId: user.id });
+        }
     }
 }
 
 function sendMessage() {
     const inp = document.getElementById('msgInput');
-    if (!inp.value.trim() && !currentReply) return;
+    const text = inp.value.trim(); // preserve value first
+    console.log('sendMessage called. Value:', text, 'ActiveID:', activeId); // Log input
 
-    socket.emit('private-message', {
-        senderId: user.id,
-        receiverId: activeId,
-        text: inp.value,
-        senderName: user.username,
-        senderAva: user.avatar,
-        replyTo: currentReply ? {
-            _id: currentReply._id,
-            senderName: currentReply.senderName,
-            content: currentReply.text || (currentReply.file ? currentReply.file.fileName : 'Файл')
-        } : null
-    });
-    inp.value = '';
-    cancelReply();
+    if (!text && !currentReply) {
+        console.log('sendMessage blocked: empty text and no reply');
+        return;
+    }
+
+    try {
+        if (socket) {
+            socket.emit('private-message', {
+                senderId: user.id,
+                receiverId: activeId,
+                text: text, // use variable
+                senderName: user.username,
+                senderAva: user.avatar,
+                replyTo: currentReply ? {
+                    _id: currentReply._id,
+                    senderName: currentReply.senderName,
+                    content: currentReply.text || (currentReply.file ? currentReply.file.fileName : 'Файл')
+                } : null
+            });
+        }
+        console.log('socket emit success');
+        inp.value = '';
+        cancelReply();
+    } catch (e) {
+        console.error('sendMessage error:', e);
+        showToast('Ошибка отправки сообщения: ' + e.message, 'error');
+    }
 }
 
 // Emoji & Files
@@ -274,124 +524,230 @@ async function uploadFile(input) {
         body: fd
     });
     const f = await res.json();
-    socket.emit('private-message', {
-        senderId: user.id,
-        receiverId: activeId,
-        senderName: user.username,
-        file: {
-            path: f.filePath,
-            fileName: f.fileName,
-            fileType: f.fileType
-        }
-    });
+
+    if (!res.ok) {
+        showToast(f.error || 'Ошибка загрузки файла', 'error');
+        return;
+    }
+
+    if (socket) {
+        socket.emit('private-message', {
+            senderId: user.id,
+            receiverId: activeId,
+            senderName: user.username,
+            text: '', // Fix crash
+            file: {
+                path: f.filePath,
+                fileName: f.fileName,
+                fileType: f.fileType
+            }
+        });
+    }
     input.value = null; // Сброс выбранного файла
 }
 
 // Socket events
-socket.on('connect', () => {
-    socket.emit('register-online', user.id);
-});
-socket.on('update-online-list', ids => {
-    // Проверяем, действительно ли список онлайн пользователей изменился
-    const currentOnline = onlineUsers.slice().sort();
-    const newOnline = ids.slice().sort();
 
-    if (JSON.stringify(currentOnline) !== JSON.stringify(newOnline)) {
-        onlineUsers = ids;
-        updateOnlineStatuses();
-        updateRightPanel();
-    }
-});
-socket.on('new-private-message', m => {
-    if (m.receiverId === activeId || m.senderId === activeId || (m.receiverId === 'GLOBAL' && activeId === 'GLOBAL')) {
-        renderMsg(m);
-        if (m.senderId === activeId) {
-            document.getElementById('typing-indicator').classList.add('hidden');
+function setupSocketListeners() {
+    if (!socket || !user) return;
+
+    // Remove existing to avoid duplicates if re-initialized
+    socket.off('update-online-list');
+    socket.off('new-private-message');
+    socket.off('notification');
+    socket.off('message-edited');
+    socket.off('message-deleted');
+    socket.off('message-status-updated');
+    socket.off('user-typing');
+    socket.off('stop-typing');
+    socket.off('user-banned');
+    socket.off('user-unbanned');
+    socket.off('user-deleted');
+
+    socket.on('update-online-list', ids => {
+        const currentOnline = onlineUsers.slice().sort();
+        const newOnline = ids.slice().sort();
+        if (JSON.stringify(currentOnline) !== JSON.stringify(newOnline)) {
+            onlineUsers = ids;
+            updateOnlineStatuses();
+            updateRightPanel();
         }
-    } else {
-        unread[m.senderId] = (unread[m.senderId] || 0) + 1;
-        // Обновляем только счетчик непрочитанных для этого пользователя
-        updateUnreadCounter(m.senderId);
-    }
-});
+    });
 
-socket.on('user-typing', ({
-    senderId,
-    receiverId
-}) => {
-    if (senderId === activeId) {
-        document.getElementById('typing-indicator').classList.remove('hidden');
-    }
-});
+    socket.on('new-private-message', m => {
+        const userIdToMove = m.senderId === user.id ? m.receiverId : m.senderId;
+        if (userIdToMove && userIdToMove !== 'GLOBAL') {
+            const userIndex = allUsers.findIndex(u => u._id === userIdToMove);
+            if (userIndex > -1) {
+                const [movedUser] = allUsers.splice(userIndex, 1);
+                allUsers.unshift(movedUser);
+                renderSidebar();
+            }
+        }
+        if (m.receiverId === activeId || m.senderId === activeId || (m.receiverId === 'GLOBAL' && activeId === 'GLOBAL')) {
+            renderMsg(m);
+        } else {
+            unread[m.senderId] = (unread[m.senderId] || 0) + 1;
+            updateUnreadCounter(m.senderId);
+        }
+    });
 
-socket.on('user-stop-typing', ({
-    senderId,
-    receiverId
-}) => {
-    if (senderId === activeId) {
-        document.getElementById('typing-indicator').classList.add('hidden');
-    }
-});
+    socket.on('notification', ({ type, message }) => {
+        showToast(message, type === 'mention' ? 'info' : type);
+    });
 
-socket.on('notification', ({
-    type,
-    message
-}) => {
-    // Можно использовать более красивое уведомление (Toast)
-    alert(`Уведомление: ${message}`);
-});
-
-socket.on('message-edited', ({
-    msgId,
-    newContent
-}) => {
-    const msgElement = document.querySelector(`[data-msg-id="${msgId}"]`);
-    if (msgElement) {
-        const contentDiv = msgElement.querySelector('div.whitespace-pre-wrap'); // Обновлено
-        if (contentDiv) {
-            contentDiv.innerHTML = newContent;
-            if (!msgElement.querySelector('.message-info .text-xs')) {
-                const infoSpan = msgElement.querySelector('.message-info');
-                if (infoSpan) {
-                    infoSpan.insertAdjacentHTML('afterbegin', '<span class="text-xs text-gray-500 mr-1">изм.</span>');
+    socket.on('message-edited', ({ msgId, newContent }) => {
+        const msgElement = document.querySelector(`[data-msg-id="${msgId}"]`);
+        if (msgElement) {
+            const contentDiv = msgElement.querySelector('div.whitespace-pre-wrap');
+            if (contentDiv) {
+                contentDiv.innerHTML = newContent;
+                if (!msgElement.querySelector('.message-info .text-xs')) {
+                    const infoSpan = msgElement.querySelector('.message-info');
+                    if (infoSpan) infoSpan.insertAdjacentHTML('afterbegin', '<span class="text-xs text-gray-500 mr-1">изм.</span>');
                 }
             }
         }
-    }
-});
+    });
 
-socket.on('message-deleted', (msgId) => {
-    const msgElement = document.querySelector(`[data-msg-id="${msgId}"]`);
-    if (msgElement) {
-        msgElement.remove();
-    }
-});
+    socket.on('message-deleted', (msgId) => {
+        const msgElement = document.querySelector(`[data-msg-id="${msgId}"]`);
+        if (msgElement) msgElement.remove();
+    });
 
-socket.on('message-status-updated', ({
-    msgId,
-    status
-}) => {
-    const msgElement = document.querySelector(`[data-msg-id="${msgId}"]`);
-    if (msgElement && status === 'read') {
-        const checkIcon = msgElement.querySelector('.message-info .fas.fa-check');
-        if (checkIcon) {
-            checkIcon.classList.remove('fa-check', 'text-gray-400');
-            checkIcon.classList.add('fa-check-double', 'text-blue-500');
+    socket.on('message-status-updated', ({ msgId, status }) => {
+        const msgElement = document.querySelector(`[data-msg-id="${msgId}"]`);
+        if (msgElement && status === 'read') {
+            const checkIcon = msgElement.querySelector('.message-info .fas.fa-check');
+            if (checkIcon) {
+                checkIcon.classList.remove('fa-check', 'text-gray-400');
+                checkIcon.classList.add('fa-check-double', 'text-blue-500');
+            }
         }
-    }
-});
+    });
+
+    socket.on('user-typing', ({ senderId, receiverId }) => {
+        const listTyping = document.getElementById(`typing-list-${senderId}`);
+        const listLastMsg = document.getElementById(`last-msg-${senderId}`);
+        if (listTyping && listLastMsg) {
+            listTyping.classList.remove('hidden');
+            listLastMsg.classList.add('hidden');
+            setTimeout(() => {
+                listTyping.classList.add('hidden');
+                listLastMsg.classList.remove('hidden');
+            }, 3000);
+        }
+        if (activeId === senderId || (activeId === 'GLOBAL' && receiverId === 'GLOBAL')) {
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (typingIndicator) typingIndicator.classList.remove('hidden');
+            const mDiv = document.getElementById('messages');
+            if (mDiv && mDiv.scrollHeight - mDiv.scrollTop === mDiv.clientHeight) {
+                mDiv.scrollTop = mDiv.scrollHeight;
+            }
+        }
+    });
+
+    socket.on('stop-typing', ({ senderId, receiverId }) => {
+        const listTyping = document.getElementById(`typing-list-${senderId}`);
+        const listLastMsg = document.getElementById(`last-msg-${senderId}`);
+        if (listTyping && listLastMsg) {
+            listTyping.classList.add('hidden');
+            listLastMsg.classList.remove('hidden');
+        }
+        if (activeId === senderId || (activeId === 'GLOBAL' && receiverId === 'GLOBAL')) {
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (typingIndicator) typingIndicator.classList.add('hidden');
+        }
+    });
+
+    socket.on("user-banned", (userId) => {
+        if (userId === user.id) {
+            alert("Вы были забанены администратором.");
+            logout();
+        } else {
+            updateUserStatus(userId, 'banned');
+        }
+    });
+
+    socket.on("user-unbanned", (userId) => {
+        updateUserStatus(userId, 'unbanned');
+    });
+
+    socket.on("user-deleted", (userId) => {
+        allUsers = allUsers.filter(u => u._id !== userId);
+        onlineUsers = onlineUsers.filter(id => id !== userId);
+        renderSidebar();
+        if (activeId === userId) {
+            activeId = null;
+            openGlobal();
+        }
+    });
+}
 
 // Utils
 function openGlobal() {
     activeId = 'GLOBAL';
-    console.log('openGlobal: activeId set to', activeId); // Лог
+    console.log('openGlobal: activeId set to', activeId);
     document.getElementById('chat-with').innerText = 'Общий чат';
     document.getElementById('chat-avatar').classList.add('hidden');
     document.getElementById('pinned-message').classList.remove('hidden');
-    document.getElementById('right-panel').classList.remove('hidden'); // Показываем правую панель
+
+    // Показываем правую панель (ширина 72)
+    const rp = document.getElementById('right-panel');
+    rp.classList.remove('hidden'); // на всякий случай
+    rp.classList.remove('w-0', 'p-0');
+    rp.classList.add('w-72');
+
     loadMsgs();
     renderSidebar();
-    renderRightPanel(); // Обновляем правую панель для глобального чата
+    renderRightPanel();
+}
+
+// toggleRightPanel (first definition removed)
+
+// Context Menu Utils
+function isAdmin() {
+    return user && user.role === 'admin';
+}
+
+function updateContextMenu() {
+    if (!selectedMsg || !user) {
+        console.warn('updateContextMenu: selectedMsg or user is missing');
+        return;
+    }
+
+    const isMe = selectedMsg.senderId === user.id;
+    const admin = isAdmin();
+    console.log(`ContextMenu for msg: ${selectedMsg._id}, isMe: ${isMe}, isAdmin: ${admin}`);
+
+    const editBtn = document.getElementById('ctx-edit');
+    const delBtn = document.getElementById('ctx-delete');
+    const replyBtn = document.getElementById('ctx-reply');
+
+    if (replyBtn) {
+        replyBtn.style.display = 'flex';
+        console.log('Reply button -> flex');
+    }
+
+    if (isMe || admin) {
+        if (editBtn) {
+            editBtn.style.display = 'flex';
+            console.log('Edit button -> flex');
+        }
+        if (delBtn) {
+            delBtn.style.display = 'flex';
+            console.log('Delete button -> flex');
+        }
+    } else {
+        if (editBtn) {
+            editBtn.style.display = 'none';
+            console.log('Edit button -> none');
+        }
+        if (delBtn) {
+            delBtn.style.display = 'none';
+            console.log('Delete button -> none');
+        }
+    }
 }
 
 function handleReply() {
@@ -402,7 +758,7 @@ function handleReply() {
 }
 
 function handleEdit() {
-    if (!isAdmin() && selectedMsg.senderId !== user.id) { // Изменено
+    if (!isAdmin() && selectedMsg.senderId !== user.id) {
         alert("Вы можете редактировать только свои сообщения.");
         return;
     }
@@ -428,7 +784,11 @@ function saveEditedMessage() {
 }
 
 function handleDelete() {
-    if (confirm("Удалить?")) {
+    if (!isAdmin() && selectedMsg.senderId !== user.id) {
+        alert("Вы можете удалять только свои сообщения.");
+        return;
+    }
+    if (confirm("Удалить это сообщение?")) {
         socket.emit('delete-message', {
             msgId: selectedMsg._id,
             userId: user.id
@@ -441,10 +801,7 @@ function cancelReply() {
     document.getElementById('reply-preview').classList.add('hidden');
 }
 
-function logout() {
-    localStorage.removeItem('user');
-    window.location.href = '/';
-}
+// Redundant logout removed
 
 function openPrivate(name) {
     const t = allUsers.find(u => u.username === name);
@@ -465,7 +822,14 @@ function openPrivate(name) {
 }
 
 function toggleRightPanel() {
-    document.getElementById('right-panel').classList.toggle('hidden');
+    const panel = document.getElementById('right-panel');
+    // Если есть класс translate-x-full, значит панель скрыта -> показываем (убираем класс)
+    // Если нет, значит показана -> скрываем (добавляем класс)
+    if (panel.classList.contains('translate-x-full') || panel.classList.contains('lg:translate-x-full')) {
+        panel.classList.remove('translate-x-full', 'lg:translate-x-full');
+    } else {
+        panel.classList.add('translate-x-full');
+    }
 }
 
 function openProfileSettings() {
@@ -548,41 +912,6 @@ async function saveProfileSettings() {
     }
 
     closeProfileSettings();
-}
-
-// Проверка, является ли текущий пользователь админом
-function isAdmin() {
-    return user && (user.role === 'admin' || user.username === 'admin');
-}
-
-// Обновление контекстного меню сообщения в зависимости от роли пользователя
-function updateContextMenu() {
-    const contextMenu = document.getElementById('context-menu');
-    contextMenu.innerHTML = ''; // Очищаем меню перед заполнением
-
-    const replyBtn = document.createElement('button');
-    replyBtn.className = 'flex items-center gap-2 p-2 text-sm text-gray-200 hover:bg-gray-700 rounded-md cursor-pointer'; // Обновленный класс
-    replyBtn.onclick = () => { handleReply(); contextMenu.classList.add('hidden'); };
-    replyBtn.innerHTML = '<i class="fas fa-reply text-blue-400"></i><span>Ответить</span>';
-    contextMenu.appendChild(replyBtn);
-
-    // Только отправитель или админ может редактировать сообщение
-    if (isAdmin() || selectedMsg.senderId === user.id) {
-        const editBtn = document.createElement('button');
-        editBtn.className = 'flex items-center gap-2 p-2 text-sm text-gray-200 hover:bg-gray-700 rounded-md cursor-pointer'; // Обновленный класс
-        editBtn.onclick = () => { handleEdit(); contextMenu.classList.add('hidden'); };
-        editBtn.innerHTML = '<i class="fas fa-edit text-yellow-400"></i><span>Изменить</span>';
-        contextMenu.appendChild(editBtn);
-    }
-
-    // Админ может удалять любые сообщения, обычный пользователь - только свои
-    if (isAdmin() || selectedMsg.senderId === user.id) {
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'flex items-center gap-2 p-2 text-sm text-red-400 hover:bg-gray-700 rounded-md cursor-pointer'; // Обновленный класс
-        deleteBtn.onclick = () => { handleDelete(); contextMenu.classList.add('hidden'); };
-        deleteBtn.innerHTML = '<i class="fas fa-trash text-red-500"></i><span>Удалить</span>';
-        contextMenu.appendChild(deleteBtn);
-    }
 }
 
 // Контекстное меню пользователя в сайдбаре
@@ -701,29 +1030,34 @@ socket.on('banned', () => {
 // Event Listeners
 document.getElementById('msgInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
-        if (e.ctrlKey) { // Если Ctrl + Enter
-            e.preventDefault(); // Предотвращаем стандартное поведение Enter (отправку формы)
-            e.target.value += '\n'; // Вставляем новую строку
-        } else { // Если просто Enter
-            e.preventDefault(); // Предотвращаем стандартное поведение Enter (перенос строки)
+        if (e.ctrlKey) {
+            // Ctrl + Enter: Вставить новую строку
+            // Стандартное поведение textarea для Enter - новая строка, но мы хотим отправку по Enter
+            // Поэтому для Ctrl+Enter мы ничего не делаем (позволяем стандартное поведение), 
+            // или явно вставляем \n если нужно
+            e.target.value += '\n';
+        } else {
+            // Enter без Ctrl: Отправить сообщение
+            e.preventDefault();
             sendMessage();
         }
     }
 });
 
+// Search Listener
+const userSearchInput = document.getElementById('user-search');
+if (userSearchInput) {
+    userSearchInput.addEventListener('input', () => {
+        renderSidebar();
+    });
+}
+
+
 let typingTimeout = null;
 document.getElementById('msgInput').addEventListener('input', (e) => {
-    socket.emit('typing', {
-        senderId: user.id,
-        receiverId: activeId
-    });
-    if (typingTimeout) clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => {
-        socket.emit('stop-typing', {
-            senderId: user.id,
-            receiverId: activeId
-        });
-    }, 1000);
+    // Auto-resize
+    e.target.style.height = 'auto';
+    e.target.style.height = (e.target.scrollHeight) + 'px';
 
     const inputVal = e.target.value;
     const lastAtIndex = inputVal.lastIndexOf('@');
@@ -754,13 +1088,20 @@ document.getElementById('msgInput').addEventListener('input', (e) => {
 });
 
 document.getElementById('msgInput').addEventListener('blur', () => {
-    // Не скрываем autocomplete на blur, чтобы можно было выбрать пользователя
-    // if (typingTimeout) clearTimeout(typingTimeout);
-    socket.emit('stop-typing', {
-        senderId: user.id,
-        receiverId: activeId
-    });
+    if (socket) {
+        socket.emit('stop-typing', {
+            senderId: user.id,
+            receiverId: activeId
+        });
+    }
 });
+
+// Polling Online Status (5 sec)
+setInterval(() => {
+    if (socket && socket.connected) {
+        socket.emit('get-online-users');
+    }
+}, 5000);
 
 document.addEventListener('click', e => {
     // Скрываем контекстное меню сообщения, если клик был вне его
@@ -781,48 +1122,8 @@ document.addEventListener('click', e => {
     }
 });
 
-// Инициализация
-loadUsers();
-function openGlobal() {
-    activeId = "GLOBAL";
-    console.log("openGlobal: activeId set to GLOBAL"); // Р›РѕРі
-    document.getElementById("chat-with").innerText = "РћР±С‰РёР№ С‡Р°С‚";
-    document.getElementById("chat-avatar").classList.add("hidden");
-    document.getElementById("pinned-message").classList.add("hidden");
-    // document.getElementById("right-panel").classList.add("hidden"); // РЈР±СЂР°Р» СЌС‚Рѕ
-    document.getElementById("right-panel").classList.remove("hidden"); // РўРµРїРµСЂСЊ РѕРЅР° РІСЃРµРіРґР° РІРёРґРёРјР°
-    loadMsgs();
-    renderSidebar();
-    updateRightPanel();
-}
-
-socket.on("user-banned", (userId) => {
-    if (userId === user.id) {
-        alert("Вы были забанены администратором.");
-        logout();
-    } else {
-        updateUserStatus(userId, 'banned');
-    }
-});
-
-socket.on("user-unbanned", (userId) => {
-    updateUserStatus(userId, 'unbanned');
-});
-
-socket.on("user-deleted", (userId) => {
-    // Удаляем пользователя из списка
-    allUsers = allUsers.filter(u => u._id !== userId);
-    // Удаляем из онлайн пользователей
-    onlineUsers = onlineUsers.filter(id => id !== userId);
-    // Перерисовываем интерфейс
-    renderSidebar();
-
-    // Если удаленный пользователь был в активном чате, закрываем чат
-    if (activeId === userId) {
-        activeId = null;
-        openGlobal();
-    }
-});
+// Typing Indicators
+// Bottom level socket listeners moved to setupSocketListeners()
 
 // Оптимизированные функции обновления интерфейса
 function updateUnreadCounter(userId) {
@@ -916,6 +1217,13 @@ function updateUserStatus(userId, action) {
     }
 }
 
-// РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ
-loadUsers();
-openGlobal(); // РћС‚РєСЂС‹РІР°РµРј РіР»РѕР±Р°Р»СЊРЅС‹Р№ С‡Р°С‚ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ РїСЂРё Р·Р°РіСЂСѓР·РєРµ
+if (socket) {
+    socket.on('global-game-event', (data) => {
+        showToast(data.message, 'success');
+    });
+}
+
+// Final initialization
+document.addEventListener('DOMContentLoaded', () => {
+    initApp();
+});

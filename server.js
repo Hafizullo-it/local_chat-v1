@@ -13,14 +13,22 @@ const app = express();
 const server = http.createServer(app);
 // Socket.IO с оптимизированными настройками для уменьшения нагрузки
 const io = new Server(server, {
-    pingTimeout: 60000,      // Увеличено с 5000 до 60000 (1 минута)
-    pingInterval: 25000,     // Увеличено с 5000 до 25000 (25 секунд)
-    maxHttpBufferSize: 1e6,  // Максимальный размер буфера
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    maxHttpBufferSize: 1e6,
     cors: {
-        origin: true,        // Разрешить все origins
+        origin: true,
         methods: ["GET", "POST"]
     }
 });
+
+// --- GLOBAL GAME STATES (Moved to top for visibility) ---
+const snakePlayers = {};
+let snakeFood = [{ x: 200, y: 200, color: '#ef4444' }];
+const seaQueue = [];
+const seaGames = {};
+
+// Game diagnostic heartbeat
 
 // Директории
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
@@ -29,45 +37,92 @@ if (!fs.existsSync('./public/uploads')) fs.mkdirSync('./public/uploads', { recur
 const usersDb = Datastore.create({ filename: './data/users.db', autoload: true });
 const msgsDb = Datastore.create({ filename: './data/messages.db', autoload: true });
 const blockedIPsDb = Datastore.create({ filename: './data/blocked_ips.db', autoload: true });
+const gamesDb = Datastore.create({ filename: './data/games.db', autoload: true });
 
-// Проверка и создание админ-пользователя
+// DATABASE OPTIMIZATION
+// NeDB-promises uses ensureIndex directly
+(async () => {
+    try {
+        await usersDb.ensureIndex({ fieldName: 'username', unique: true });
+        await usersDb.ensureIndex({ fieldName: 'ips' });
+        await msgsDb.ensureIndex({ fieldName: 'timestamp' });
+        await msgsDb.ensureIndex({ fieldName: 'senderId' });
+        await msgsDb.ensureIndex({ fieldName: 'receiverId' });
+        console.log('✅ База данных оптимизирована (индексы созданы)');
+    } catch (e) {
+        console.error('Ошибка оптимизации БД:', e);
+    }
+})();
+
+// Проверка и создание админ-пользователя (оптимизировано)
 (async () => {
     const adminUser = await usersDb.findOne({ username: 'admin' });
     if (!adminUser) {
-        const hashedPassword = await bcrypt.hash('adminpass', 10); // Пароль по умолчанию для админа
-        await usersDb.insert({ username: 'admin', password: hashedPassword, avatar: '', lastMsgAt: new Date(), role: 'admin' });
-        console.log('Администратор "admin" создан с паролем по умолчанию');
+        const hashedPassword = await bcrypt.hash('adminpass', 10);
+        await usersDb.insert({ username: 'admin', password: hashedPassword, avatar: '/img/default-avatar.png', lastMsgAt: new Date(), role: 'admin' });
+        console.log('⚠️ Администратор "admin" создан с паролем по умолчанию. СМЕНИТЕ ПАРОЛЬ!');
     } else {
-        // Если админ существует, но пароль не совпадает с adminpass, обновляем его
-        const defaultPassword = await bcrypt.hash('adminpass', 10);
-        const match = await bcrypt.compare('adminpass', adminUser.password);
-        const updates = {};
-        if (!match) {
-            updates.password = defaultPassword;
-            console.log('Пароль администратора "admin" сброшен на значение по умолчанию');
-        }
+        // Только проверяем и устанавливаем роль если её нет
         if (!adminUser.role) {
-            updates.role = 'admin';
+            await usersDb.update({ username: 'admin' }, { $set: { role: 'admin' } });
             console.log('Роль администратора "admin" установлена');
-        }
-        if (Object.keys(updates).length > 0) {
-            await usersDb.update({ username: 'admin' }, { $set: updates });
         }
     }
 })();
 
+// Разрешённые типы файлов для безопасности
+const ALLOWED_FILE_TYPES = [
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'video/mp4', 'video/webm',
+    'audio/mpeg', 'audio/wav', 'audio/ogg',
+    'application/pdf',
+    'text/plain'
+];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+// Безопасное имя файла
+function sanitizeFilename(filename) {
+    return filename
+        .replace(/[^a-zA-Z0-9._-]/g, '_') // Убираем опасные символы
+        .replace(/\.{2,}/g, '.') // Убираем множественные точки
+        .substring(0, 100); // Ограничиваем длину
+}
+
 const storage = multer.diskStorage({
-    destination: './public/uploads/',
-    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+    destination: (req, file, cb) => {
+        const uploadPath = path.join(__dirname, 'public', 'uploads');
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+        }
+        cb(null, uploadPath);
+    },
+    filename: (req, file, cb) => {
+        const safeName = sanitizeFilename(file.originalname);
+        cb(null, Date.now() + '-' + safeName);
+    }
 });
-const upload = multer({ storage });
+
+// Фильтр файлов для безопасности
+const fileFilter = (req, file, cb) => {
+    if (ALLOWED_FILE_TYPES.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Недопустимый тип файла'), false);
+    }
+};
+
+const upload = multer({
+    storage,
+    // fileFilter, // Removed restriction
+    limits: { fileSize: MAX_FILE_SIZE }
+});
 
 // Middleware для блокировки IP
 app.use(async (req, res, next) => {
     const clientIP = req.ip || req.connection.remoteAddress ||
-                     (req.socket && req.socket.remoteAddress) ||
-                     (req.connection && req.connection.remoteAddress) ||
-                     'unknown';
+        (req.socket && req.socket.remoteAddress) ||
+        (req.connection && req.connection.remoteAddress) ||
+        'unknown';
 
     // Очищаем IP от ::ffff: префикса для IPv4
     const cleanIP = clientIP.replace(/^::ffff:/, '');
@@ -370,6 +425,48 @@ app.post('/api/admin/unblock-all-ips', async (req, res) => {
     }
 });
 
+// Новое API: Статистика по IP
+app.get('/api/admin/ip-stats', async (req, res) => {
+    const adminUser = await usersDb.findOne({ _id: req.query.adminId });
+    if (!adminUser || adminUser.role !== 'admin') {
+        return res.status(403).json({ error: 'Недостаточно прав.' });
+    }
+
+    try {
+        const users = await usersDb.find({});
+        const blockedIPsList = await blockedIPsDb.find({});
+        const blockedIPsSet = new Set(blockedIPsList.map(b => b.ip));
+
+        const ipStats = {};
+
+        users.forEach(u => {
+            if (u.ips && Array.isArray(u.ips)) {
+                u.ips.forEach(ip => {
+                    if (!ipStats[ip]) {
+                        ipStats[ip] = {
+                            ip: ip,
+                            count: 0,
+                            users: [],
+                            blocked: blockedIPsSet.has(ip)
+                        };
+                    }
+                    ipStats[ip].count++;
+                    if (!ipStats[ip].users.includes(u.username)) {
+                        ipStats[ip].users.push(u.username);
+                    }
+                });
+            }
+        });
+
+        // Преобразуем в массив и сортируем по количеству аккаунтов
+        const sortedStats = Object.values(ipStats).sort((a, b) => b.count - a.count);
+        res.json(sortedStats);
+    } catch (error) {
+        console.error('Error getting IP stats:', error);
+        res.status(500).json({ error: 'Ошибка получения статистики IP' });
+    }
+});
+
 const onlineUsers = new Map();
 
 // Валидация входных данных
@@ -379,10 +476,10 @@ function sanitizeInput(input) {
 }
 
 // API: Логин/Регистрация (Авто-создание если нет)
-app.post('/api/login', authLimiter, async (req, res) => {
+// API: Регистрация
+app.post('/api/register', authLimiter, async (req, res) => {
     const { username, password } = req.body;
 
-    // Валидация входных данных
     const cleanUsername = sanitizeInput(username);
     const cleanPassword = sanitizeInput(password);
 
@@ -394,25 +491,87 @@ app.post('/api/login', authLimiter, async (req, res) => {
         return res.status(400).json({ error: 'Имя пользователя или пароль слишком длинные.' });
     }
 
-    let user = await usersDb.findOne({ username: cleanUsername });
-    if (!user) {
-        const hashedPassword = await bcrypt.hash(cleanPassword, 10);
-        user = await usersDb.insert({ username: cleanUsername, password: hashedPassword, avatar: '/img/default-avatar.png', lastMsgAt: new Date(), role: 'user' });
-
-    } else {
-        const match = await bcrypt.compare(cleanPassword, user.password);
-        if (!match) return res.status(400).json({ error: 'Неверный пароль' });
-
-        // Проверяем, не забанен ли пользователь
-        if (user.banned) {
-            return res.status(403).json({ error: 'Ваш аккаунт заблокирован. Обратитесь к администратору.' });
-        }
+    const existingUser = await usersDb.findOne({ username: cleanUsername });
+    if (existingUser) {
+        return res.status(400).json({ error: 'Пользователь с таким именем уже существует.' });
     }
 
-    // Проверяем, не забанен ли новый пользователь
+    const hashedPassword = await bcrypt.hash(cleanPassword, 10);
+
+    // Получаем IP
+    const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
+    const cleanIP = clientIP.replace(/^::ffff:/, '');
+
+    // AUTO-BAN LOGIC: Check if IP has too many accounts
+    const accountsWithThisIP = await usersDb.find({ ips: cleanIP });
+    if (accountsWithThisIP.length >= 5) {
+        // Block IP
+        await blockedIPsDb.insert({ ip: cleanIP, reason: 'Too many accounts (5+)', timestamp: new Date() });
+
+        // Notify Admins
+        const adminSockets = [];
+        for (const [uid, sockets] of onlineUsers.entries()) {
+            const uInfo = await usersDb.findOne({ _id: uid });
+            if (uInfo && uInfo.role === 'admin') {
+                sockets.forEach(sid => adminSockets.push(sid));
+            }
+        }
+
+        adminSockets.forEach(sid => {
+            io.to(sid).emit('notification', {
+                type: 'admin-alert',
+                message: `⚠️ AUTO-BAN: IP ${cleanIP} заблокирован (создано 5+ аккаунтов).`
+            });
+        });
+
+        console.log(`[SECURITY] Auto-banned IP: ${cleanIP} due to account limit (5)`);
+        return res.status(403).json({ error: 'Достигнут лимит регистраций для вашего IP. IP заблокирован.' });
+    }
+
+    const user = await usersDb.insert({
+        username: cleanUsername,
+        password: hashedPassword,
+        avatar: '/img/default-avatar.png',
+        lastMsgAt: new Date(),
+        role: 'user',
+        ips: [cleanIP]
+    });
+
+    res.json({ success: true, user: { id: user._id, username: user.username, avatar: user.avatar, role: user.role } });
+});
+
+// API: Вход
+app.post('/api/login', authLimiter, async (req, res) => {
+    const { username, password } = req.body;
+
+    const cleanUsername = sanitizeInput(username);
+    const cleanPassword = sanitizeInput(password);
+
+    if (!cleanUsername || !cleanPassword) {
+        return res.status(400).json({ error: 'Имя пользователя и пароль обязательны.' });
+    }
+
+    const user = await usersDb.findOne({ username: cleanUsername });
+    if (!user) {
+        return res.status(400).json({ error: 'Пользователь не найден. Пожалуйста, зарегистрируйтесь.' });
+    }
+
+    const match = await bcrypt.compare(cleanPassword, user.password);
+    if (!match) return res.status(400).json({ error: 'Неверный пароль' });
+
     if (user.banned) {
         return res.status(403).json({ error: 'Ваш аккаунт заблокирован. Обратитесь к администратору.' });
     }
+
+    // Получаем IP
+    const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
+    const cleanIP = clientIP.replace(/^::ffff:/, '');
+
+    // Сохраняем IP адрес
+    await usersDb.update(
+        { _id: user._id },
+        { $addToSet: { ips: cleanIP } }
+    );
 
     res.json({ success: true, user: { id: user._id, username: user.username, avatar: user.avatar, role: user.role } });
 });
@@ -426,13 +585,13 @@ app.get('/api/users', async (req, res) => {
 // История сообщений
 app.get('/api/messages/:u1/:u2', async (req, res) => {
     const { u1, u2 } = req.params;
-    const q = u2 === 'GLOBAL' ? { receiverId: 'GLOBAL' } : { $or: [{senderId:u1, receiverId:u2}, {senderId:u2, receiverId:u1}] };
+    const q = u2 === 'GLOBAL' ? { receiverId: 'GLOBAL' } : { $or: [{ senderId: u1, receiverId: u2 }, { senderId: u2, receiverId: u1 }] };
     res.json(await msgsDb.find(q).sort({ timestamp: 1 }));
 });
 
 // Загрузка файлов через API
 app.post('/api/upload', upload.single('chatFile'), (req, res) => {
-    if(!req.file) return res.status(400).send('No file');
+    if (!req.file) return res.status(400).send('No file');
     res.json({ filePath: '/uploads/' + req.file.filename, fileName: req.file.originalname, fileType: req.file.mimetype });
 });
 
@@ -521,8 +680,15 @@ function emitOnlineUpdate() {
 io.on('connection', (socket) => {
     socket.on('register-online', (userId) => {
         socket.userId = userId;
-        onlineUsers.set(userId, socket.id);
-        emitOnlineUpdate(); // Используем throttling
+        if (!onlineUsers.has(userId)) {
+            onlineUsers.set(userId, new Set());
+        }
+        onlineUsers.get(userId).add(socket.id);
+        emitOnlineUpdate();
+    });
+
+    socket.on('get-online-users', () => {
+        socket.emit('update-online-list', Array.from(onlineUsers.keys()));
     });
 
     socket.on('private-message', async (data) => {
@@ -535,7 +701,8 @@ io.on('connection', (socket) => {
 
         // Обработка упоминаний
         const mentionedUsers = [];
-        const userMentions = data.text.match(/@\w+/g);
+        const userMentions = (data.text || '').match(/@\w+/g);
+
         if (userMentions) {
             const allUsers = await usersDb.find({}, { username: 1 });
             userMentions.forEach(mention => {
@@ -544,9 +711,11 @@ io.on('connection', (socket) => {
                 if (mentionedUser) {
                     mentionedUsers.push(mentionedUser._id);
                     // Отправляем уведомление упомянутому пользователю
-                    const mentionedUserSocketId = onlineUsers.get(mentionedUser._id);
-                    if (mentionedUserSocketId) {
-                        io.to(mentionedUserSocketId).emit('notification', { type: 'mention', message: `${data.senderName} упомянул вас в чате: ${data.text}` }); // Исправлено data.content на data.text
+                    const socketIds = onlineUsers.get(mentionedUser._id);
+                    if (socketIds) {
+                        socketIds.forEach(sid => {
+                            io.to(sid).emit('notification', { type: 'mention', message: `${data.senderName} упомянул вас в чате: ${data.text}` });
+                        });
                     }
                 }
             });
@@ -623,9 +792,220 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        onlineUsers.delete(socket.userId);
-        emitOnlineUpdate(); // Используем throttling
+        if (socket.userId && onlineUsers.get(socket.userId)) {
+            const socketIds = onlineUsers.get(socket.userId);
+            socketIds.delete(socket.id);
+            if (socketIds.size === 0) onlineUsers.delete(socket.userId);
+        }
+        emitOnlineUpdate();
+
+        // Cleanup Snake (uses socket.id)
+        if (snakePlayers[socket.id]) delete snakePlayers[socket.id];
+
+        // Cleanup Sea Battle
+        handleSeaDisconnect(socket);
     });
+
+
+    // --- SNAKE GAME LOGIC ---
+    socket.on('snake-join', (player) => {
+        const colors = ['#ef4444', '#3b82f6', '#10b981', '#fbbf24', '#f472b6', '#a78bfa', '#2dd4bf'];
+        const startX = Math.floor(Math.random() * 20 + 5) * 20;
+        const startY = Math.floor(Math.random() * 20 + 5) * 20;
+
+        snakePlayers[socket.id] = {
+            ...player,
+            socketId: socket.id,
+            body: [{ x: startX, y: startY }, { x: startX - 20, y: startY }, { x: startX - 40, y: startY }],
+            dir: 'right',
+            score: 0,
+            color: colors[Math.floor(Math.random() * colors.length)]
+        };
+        console.log(`Snake Join: ${player.username} on socket ${socket.id}`);
+        // Send state back immediately to verify communication
+        io.emit('snake-update', { snakes: snakePlayers, food: snakeFood });
+    });
+
+    socket.on('snake-dir', (dir) => {
+        if (snakePlayers[socket.id]) {
+            const curDir = snakePlayers[socket.id].dir;
+            const opposites = { 'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left' };
+            if (opposites[dir] !== curDir) snakePlayers[socket.id].dir = dir;
+        }
+    });
+
+    // --- SEA BATTLE LOGIC ---
+    socket.on('sea-find-match', (player) => {
+        console.log(`SeaMatch Search: ${player.username} (${socket.id})`);
+
+        // Remove old entries for THIS SOCKET
+        const qIdx = seaQueue.findIndex(p => p.socketId === socket.id);
+        if (qIdx > -1) seaQueue.splice(qIdx, 1);
+
+        seaQueue.push({ ...player, socketId: socket.id });
+
+        if (seaQueue.length >= 2) {
+            const p1 = seaQueue.shift();
+            const p2 = seaQueue.shift();
+            const gameId = 'sea_' + Date.now();
+
+            const placeShips = () => {
+                const s = [];
+                while (s.length < 10) {
+                    const idx = Math.floor(Math.random() * 100);
+                    if (!s.includes(idx)) s.push(idx);
+                }
+                return s;
+            };
+
+            const ships1 = placeShips();
+            const ships2 = placeShips();
+
+            seaGames[gameId] = {
+                id: gameId,
+                players: [p1, p2],
+                ships: { [p1.socketId]: ships1, [p2.socketId]: ships2 },
+                hits: { [p1.socketId]: [], [p2.socketId]: [] },
+                turn: p1.socketId
+            };
+
+            io.to(p1.socketId).emit('sea-start', { gameId, players: [p1, p2], startingPlayer: p1.socketId, myShips: ships1 });
+            io.to(p2.socketId).emit('sea-start', { gameId, players: [p1, p2], startingPlayer: p1.socketId, myShips: ships2 });
+        }
+    });
+
+    socket.on('sea-shot', ({ gameId, index }) => {
+        const game = seaGames[gameId];
+        if (!game || game.turn !== socket.id) return;
+
+        const opponent = game.players.find(p => p.socketId !== socket.id);
+        const isHit = game.ships[opponent.socketId].includes(index);
+        game.hits[socket.id].push(index);
+
+        io.to(game.players[0].socketId).emit('sea-shot-result', { shooterId: socket.id, index, isHit });
+        io.to(game.players[1].socketId).emit('sea-shot-result', { shooterId: socket.id, index, isHit });
+
+        const totalHits = game.hits[socket.id].filter(h => game.ships[opponent.socketId].includes(h)).length;
+        if (totalHits === 10) {
+            io.to(game.players[0].socketId).emit('sea-win', socket.id);
+            io.to(game.players[1].socketId).emit('sea-win', socket.id);
+
+            // Log Result
+            const winner = game.players.find(p => p.socketId === socket.id);
+            saveGameResult('Морской Бой', winner.username,
+                game.players.map(p => p.username),
+                { score: totalHits, duration: Date.now() - parseInt(gameId.split('_')[1]) }
+            );
+
+            delete seaGames[gameId];
+        } else if (!isHit) {
+            game.turn = opponent.socketId;
+        }
+    });
+});
+
+function handleSeaDisconnect(socket) {
+    const qIdx = seaQueue.findIndex(p => p.socketId === socket.id);
+    if (qIdx > -1) seaQueue.splice(qIdx, 1);
+
+    for (const id in seaGames) {
+        const game = seaGames[id];
+        if (game.players.some(p => p.socketId === socket.id)) {
+            const other = game.players.find(p => p.socketId !== socket.id);
+            if (other) io.to(other.socketId).emit('sea-opponent-disconnected');
+            delete seaGames[id];
+        }
+    }
+}
+
+// Snake Engine
+setInterval(() => {
+    const GRID = 20;
+    const SIZE = 600;
+
+    Object.values(snakePlayers).forEach(s => {
+        const head = { ...s.body[0] };
+        if (s.dir === 'up') head.y -= GRID;
+        if (s.dir === 'down') head.y += GRID;
+        if (s.dir === 'left') head.x -= GRID;
+        if (s.dir === 'right') head.x += GRID;
+
+        // Wall Collision
+        if (head.x < 0 || head.x >= SIZE || head.y < 0 || head.y >= SIZE) {
+            io.to(s.socketId).emit('snake-dead', s.socketId);
+            saveGameResult('Змейка', s.id, [s.username], { score: s.score, reason: 'wall' });
+            delete snakePlayers[s.socketId];
+            return;
+        }
+
+        // Self/Other Collision
+        let collided = false;
+        Object.values(snakePlayers).forEach(other => {
+            other.body.forEach((part, index) => {
+                if (s.socketId === other.socketId && index === 0) return;
+                if (head.x === part.x && head.y === part.y) collided = true;
+            });
+        });
+
+        if (collided) {
+            io.to(s.socketId).emit('snake-dead', s.socketId);
+            saveGameResult('Змейка', s.id, [s.username], { score: s.score, reason: 'collision' });
+            delete snakePlayers[s.socketId];
+            return;
+        }
+
+        s.body.unshift(head);
+
+        // Food Collision
+        const foodIdx = snakeFood.findIndex(f => f.x === head.x && f.y === head.y);
+        if (foodIdx > -1) {
+            s.score += 10;
+            snakeFood.splice(foodIdx, 1);
+            // Spawn new food
+            snakeFood.push({
+                x: Math.floor(Math.random() * (SIZE / GRID)) * GRID,
+                y: Math.floor(Math.random() * (SIZE / GRID)) * GRID,
+                color: ['#ef4444', '#fbbf24', '#10b981', '#3b82f6'][Math.floor(Math.random() * 4)]
+            });
+        } else {
+            s.body.pop();
+        }
+    });
+
+    if (Object.keys(snakePlayers).length > 0) {
+        // Broadcast to everyone (could be optimized with a 'snake-room')
+        io.emit('snake-update', { snakes: snakePlayers, food: snakeFood });
+    }
+}, 150);
+
+
+// Game result logging helper
+async function saveGameResult(gameName, winnerId, players, details) {
+    try {
+        const result = {
+            game: gameName,
+            winnerId,
+            players,
+            details,
+            timestamp: new Date()
+        };
+        await gamesDb.insert(result);
+        console.log(`[GAME LOG] ${gameName} ended. Result saved.`);
+
+        // Broadcast a small event for global log (optional)
+        io.emit('global-game-event', { message: `Игра ${gameName} завершена. Победил: ${winnerId === 'DRAW' ? 'Ничья' : winnerId}` });
+    } catch (e) {
+        console.error('Error saving game result:', e);
+    }
+}
+
+// GLOBAL ERROR HANDLER
+app.use((err, req, res, next) => {
+    console.error('SERVER ERROR:', err.message);
+    if (err.message === 'Недопустимый тип файла') {
+        return res.status(400).json({ error: err.message });
+    }
+    res.status(500).json({ error: err.message, details: err.stack });
 });
 
 server.listen(3000, () => console.log('SERVER RUNNING: http://localhost:3000'));

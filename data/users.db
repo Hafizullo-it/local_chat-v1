@@ -1,3 +1,14 @@
-{"username":"admin","password":"$2b$10$cpE2ihQEPSZBQzncXevzROwu.OWpytbl92/YcwQywOSS0a3v/Bhq.","avatar":"/uploads/1768930113804-solar-system-planet-collage.jpg","online":false,"_id":"M36BPRlQgq5PhY48","lastMessageDate":1769006288770,"lastMsgAt":{"$$date":1769185276440},"role":"admin"}
-{"username":"shadow","password":"$2b$10$e7pLwBSTxnJKs8.hst9A5.nwIJevYXnvyBEGqqo4B2dqGnW5W0oe.","avatar":"/img/default-avatar.png","lastMsgAt":{"$$date":1769185276443},"role":"user","_id":"NuXI7Z3tVNEplB9I"}
-{"username":"asus","password":"$2b$10$0XUgnDGzgIA0V3UCTPXcxuiVvVb6LS4zh/5v2NqHBeexkM6H511Eq","avatar":"/uploads/1769080873586-mermaid-diagram-2026-01-12-170041.png","lastMsgAt":{"$$date":1769080827273},"role":"user","_id":"qXxtAFZAwZpQxe7X"}
+{"username":"admin","password":"$2b$10$cpE2ihQEPSZBQzncXevzROwu.OWpytbl92/YcwQywOSS0a3v/Bhq.","avatar":"/uploads/1768930113804-solar-system-planet-collage.jpg","online":false,"_id":"M36BPRlQgq5PhY48","lastMessageDate":1769006288770,"lastMsgAt":{"$$date":1769443895774},"role":"admin","ips":["::1"]}
+{"username":"vadim","password":"$2b$10$dv7cHyyzsyFmV6qEFWBgJeNmONQr5rjh5XEIK7NNrtQ7doj.RcPSy","avatar":"/img/default-avatar.png","lastMsgAt":{"$$date":1769434774215},"role":"user","_id":"nUNXMpoczy2iBYbV","ips":["192.168.150.101"]}
+{"$$indexCreated":{"fieldName":"username","unique":true,"sparse":false}}
+{"$$indexCreated":{"fieldName":"ips","unique":false,"sparse":false}}
+{"$$indexCreated":{"fieldName":"ips"}}
+{"username":"Аоалал","password":"$2b$10$Z..dMPhN9FE3bZLb.AHPaOBDSuIsD1SmbnAp5Qx6Qiq7M8yUsjgH2","avatar":"/img/default-avatar.png","lastMsgAt":{"$$date":1769444407908},"role":"user","ips":["192.168.150.101"],"_id":"kJbABCvC0L2JRAOf"}
+{"username":"Алклклклл","password":"$2b$10$H4CbBJvWxjTFpUSgYMQCVuIPgnZSH8XFy85.wqqg13Cy.PIiX7Y2O","avatar":"/img/default-avatar.png","lastMsgAt":{"$$date":1769444418209},"role":"user","ips":["192.168.150.101"],"_id":"vxhD46IAAfko2iZK"}
+{"username":"Алалалаҳ","password":"$2b$10$ol0c82zYps61KCNzJWpcuebtwz5pO531m3Y1AmzzR9wmM2XFEJpty","avatar":"/img/default-avatar.png","lastMsgAt":{"$$date":1769444429355},"role":"user","ips":["192.168.150.101"],"_id":"CnfqVrtho3OJCCaA"}
+{"username":"Алклкҳҳк","password":"$2b$10$Gel6xfMfx1vfzn2xsb4.yudkO2./1.p.dh9vfvuZijHy1eh8KJVQK","avatar":"/img/default-avatar.png","lastMsgAt":{"$$date":1769444438819},"role":"user","ips":["192.168.150.101"],"_id":"gHiBK4Ckwug89yx1"}
+{"$$deleted":true,"_id":"CnfqVrtho3OJCCaA"}
+{"$$deleted":true,"_id":"gHiBK4Ckwug89yx1"}
+{"$$deleted":true,"_id":"kJbABCvC0L2JRAOf"}
+{"$$deleted":true,"_id":"vxhD46IAAfko2iZK"}
+{"username":"admin","password":"$2b$10$cpE2ihQEPSZBQzncXevzROwu.OWpytbl92/YcwQywOSS0a3v/Bhq.","avatar":"/uploads/1769444634860-pngegg__1_.png","online":false,"_id":"M36BPRlQgq5PhY48","lastMessageDate":1769006288770,"lastMsgAt":{"$$date":1769443895774},"role":"admin","ips":["::1"]}

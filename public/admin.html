@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,25 +14,31 @@
             font-family: 'Inter', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
+
         .admin-card {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
+
         .user-row:hover {
             background-color: rgba(59, 130, 246, 0.1);
         }
+
         .status-online {
             background-color: #10b981;
         }
+
         .status-offline {
             background-color: #6b7280;
         }
+
         .status-banned {
             background-color: #ef4444;
         }
     </style>
 </head>
+
 <body class="min-h-screen py-8 px-4">
     <div class="max-w-7xl mx-auto">
         <!-- Header -->
@@ -44,7 +51,8 @@
                         <p class="text-gray-600">Управление пользователями и системой</p>
                     </div>
                 </div>
-                <button onclick="goBackToChat()" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors duration-200 flex items-center space-x-2">
+                <button onclick="goBackToChat()"
+                    class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors duration-200 flex items-center space-x-2">
                     <i class="fas fa-arrow-left"></i>
                     <span>Вернуться в чат</span>
                 </button>
@@ -88,15 +96,51 @@
                 <table class="w-full">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Пользователь</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Роль</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Последняя активность</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Пользователь</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Статус</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Роль</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Последняя активность</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Действия</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200" id="users-table">
                         <!-- Users will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- IP Stats Section -->
+        <div class="admin-card rounded-2xl shadow-2xl overflow-hidden mt-8">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+                    <i class="fas fa-network-wired mr-2 text-purple-600"></i>
+                    Статистика IP (Мультиаккаунты)
+                </h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                IP Адрес</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Аккаунтов</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Пользователи</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Статус</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200" id="ip-stats-table">
+                        <!-- IP Stats loaded here -->
                     </tbody>
                 </table>
             </div>
@@ -110,10 +154,12 @@
                     Управление IP адресами
                 </h2>
                 <div class="flex space-x-2">
-                    <button onclick="loadBlockedIPs()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">
+                    <button onclick="loadBlockedIPs()"
+                        class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">
                         🔄 Обновить
                     </button>
-                    <button onclick="unblockAllIPs()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm">
+                    <button onclick="unblockAllIPs()"
+                        class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm">
                         🚫 Разблокировать все
                     </button>
                 </div>
@@ -125,12 +171,12 @@
                     <div class="flex-1">
                         <label class="block text-sm font-medium text-gray-700 mb-1">IP адрес:</label>
                         <input type="text" id="block-ip-input" placeholder="192.168.1.100"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
                     </div>
                     <div class="flex-1">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Причина:</label>
                         <input type="text" id="block-reason-input" placeholder="Нарушение правил"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
                     </div>
                     <button onclick="blockIP()" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg">
                         🚫 Заблокировать IP
@@ -142,10 +188,14 @@
                 <table class="w-full">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP адрес</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Причина</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Заблокирован</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                IP адрес</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Причина</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Заблокирован</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Действия</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200" id="blocked-ips-table">
@@ -167,17 +217,21 @@
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Имя пользователя:</label>
-                    <input type="text" id="edit-username" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="text" id="edit-username"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Новый пароль (оставьте пустым, чтобы не менять):</label>
-                    <input type="password" id="edit-password" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Новый пароль (оставьте пустым, чтобы не
+                        менять):</label>
+                    <input type="password" id="edit-password"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Роль:</label>
-                    <select id="edit-role" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="edit-role"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="user">Пользователь</option>
                         <option value="admin">Администратор</option>
                     </select>
@@ -185,10 +239,12 @@
             </div>
 
             <div class="flex space-x-3 mt-6">
-                <button onclick="closeEditModal()" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-colors duration-200">
+                <button onclick="closeEditModal()"
+                    class="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-colors duration-200">
                     Отмена
                 </button>
-                <button onclick="saveUserChanges()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors duration-200">
+                <button onclick="saveUserChanges()"
+                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors duration-200">
                     Сохранить
                 </button>
             </div>
@@ -196,7 +252,8 @@
     </div>
 
     <!-- Notification -->
-    <div id="notification" class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 hidden">
+    <div id="notification"
+        class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 hidden">
         <div class="flex items-center space-x-2">
             <i class="fas fa-check-circle"></i>
             <span id="notification-text"></span>
@@ -649,12 +706,71 @@
         // Load initial data
         loadUsers();
         loadBlockedIPs();
+        loadIPStats();
 
-        // Refresh data every 120 seconds to reduce load
+        // Refresh data every 60 seconds
         setInterval(() => {
             loadUsers();
             loadBlockedIPs();
-        }, 120000);
+            loadIPStats();
+        }, 60000);
+
+        async function loadIPStats() {
+            try {
+                const response = await fetch(`/api/admin/ip-stats?adminId=${user.id}`);
+                const stats = await response.json();
+
+                if (response.ok) {
+                    renderIPStatsTable(stats);
+                }
+            } catch (error) {
+                console.error('Error loading IP stats:', error);
+            }
+        }
+
+        function renderIPStatsTable(stats) {
+            const tbody = document.getElementById('ip-stats-table');
+            tbody.innerHTML = '';
+
+            stats.forEach(item => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+
+                const usersList = item.users.join(', ');
+                const isBlocked = item.blocked;
+
+                // Подсветка мультиаккаунтов
+                const countClass = item.count > 1 ? 'text-orange-600 font-bold' : 'text-gray-900';
+                const countBadge = item.count > 2 ? `<span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full ml-2">Масс-рег!</span>` : '';
+
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm">${item.ip}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm ${countClass}">
+                        ${item.count} ${countBadge}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title="${usersList}">
+                        ${usersList}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isBlocked ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">
+                            ${isBlocked ? 'Заблокирован' : 'Чист'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        ${!isBlocked ?
+                        `<button onclick="document.getElementById('block-ip-input').value = '${item.ip}'; document.getElementById('block-ip-input').focus();" class="text-red-600 hover:text-red-900">
+                                <i class="fas fa-ban"></i> Забанить IP
+                            </button>` :
+                        `<button onclick="unblockIP('${item.ip}')" class="text-green-600 hover:text-green-900">
+                                <i class="fas fa-unlock"></i> Разблокировать
+                            </button>`
+                    }
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
     </script>
 </body>
+
 </html>
